@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { TreeData, ViewMode } from './types';
+import { TreeData, ViewMode, Person } from './types';
 import { createEmptyTree, generateId } from './constants';
 import { Button } from './components/Button';
 import { TreeVisualization } from './components/TreeVisualization';
 import { generateFamilyStory } from './services/geminiService';
-import { Leaf, LogOut, Printer, Sparkles, Sprout, Share2, ArrowLeft, Download, Upload, X } from 'lucide-react';
+import { Leaf, LogOut, Printer, Sparkles, Sprout, Share2, ArrowLeft, Download, Upload, X, Trash2, Search, GitMerge, User } from 'lucide-react';
 
 const App = () => {
   // State
@@ -16,9 +16,12 @@ const App = () => {
   const [aiStory, setAiStory] = useState<string | null>(null);
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
   
-  // New Tree Modal State
+  // Modals
   const [isCreatingTree, setIsCreatingTree] = useState(false);
+  const [isMergingTree, setIsMergingTree] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [newTreeName, setNewTreeName] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,6 +41,8 @@ const App = () => {
   useEffect(() => {
     if (trees.length > 0) {
       localStorage.setItem('family_trees', JSON.stringify(trees));
+    } else {
+        localStorage.removeItem('family_trees');
     }
   }, [trees]);
 
@@ -60,9 +65,36 @@ const App = () => {
     setIsCreatingTree(false);
   };
 
+  const handleDeleteTree = (treeId: string) => {
+    if (window.confirm("Er du helt sikker på at du vil hugge ned (slette) dette familietreet? Dette kan ikke angres.")) {
+        setTrees(prev => prev.filter(t => t.id !== treeId));
+        if (currentTreeId === treeId) {
+            setCurrentTreeId(null);
+            setFocusedNodeId(null);
+        }
+    }
+  };
+
+  const handleMergeTree = (targetTreeId: string) => {
+    if (!activeTree) return;
+    const targetTree = trees.find(t => t.id === targetTreeId);
+    if (!targetTree) return;
+
+    if (!window.confirm(`Vil du flette "${targetTree.name}" inn i "${activeTree.name}"? Dette vil legge alle personer til i denne hagen. Du må koble dem sammen manuelt etterpå.`)) {
+        return;
+    }
+
+    // Merge nodes
+    const mergedNodes = { ...activeTree.nodes, ...targetTree.nodes };
+    const updatedTree = { ...activeTree, nodes: mergedNodes };
+    
+    setTrees(prev => prev.map(t => t.id === activeTree.id ? updatedTree : t));
+    setIsMergingTree(false);
+    alert(`Hagen "${targetTree.name}" er nå en del av denne hagen! Bruk søkefunksjonen for å finne de nye personene.`);
+  };
+
   const handleOpenTree = (tree: TreeData) => {
     setCurrentTreeId(tree.id);
-    // Ensure focused node is valid
     setFocusedNodeId(tree.rootId in tree.nodes ? tree.rootId : Object.keys(tree.nodes)[0]);
     setCurrentView('EDITOR');
     setAiStory(null);
@@ -90,9 +122,7 @@ const App = () => {
   const exportData = () => {
     const dataStr = JSON.stringify(trees, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
     const exportFileDefaultName = `livets-tre-backup-${new Date().toISOString().slice(0, 10)}.json`;
-
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -114,7 +144,6 @@ const App = () => {
             const importedData = JSON.parse(content);
 
             if (Array.isArray(importedData)) {
-                // Filter out duplicates based on ID to avoid crashes, or just append distinct ones
                 const newTrees = importedData.filter((importedTree: TreeData) => 
                     !trees.some(existing => existing.id === importedTree.id)
                 );
@@ -132,7 +161,6 @@ const App = () => {
             console.error("Import error", error);
             alert("Kunne ikke lese filen. Er det en gyldig JSON-fil?");
         }
-        // Reset input
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
     reader.readAsText(file);
@@ -143,7 +171,6 @@ const App = () => {
 
   const LoginView = () => (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 relative overflow-hidden">
-        {/* Animated Clouds Background (Simple CSS implementation) */}
         <div className="absolute top-20 left-10 text-ghibli-sky/20 animate-float"><Leaf size={64} /></div>
         <div className="absolute bottom-20 right-10 text-ghibli-green/20 animate-float" style={{ animationDelay: '2s' }}><Sprout size={96} /></div>
 
@@ -180,7 +207,6 @@ const App = () => {
                 <Button variant="ghost" onClick={() => setCurrentView('LOGIN')} icon={<LogOut size={18} />}>
                     Logg ut
                 </Button>
-                {/* Hidden File Input */}
                 <input 
                     type="file" 
                     accept=".json" 
@@ -192,7 +218,6 @@ const App = () => {
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* New Tree Card */}
             <button 
                 onClick={startCreateTree}
                 className="h-64 rounded-2xl border-4 border-dashed border-ghibli-green/30 flex flex-col items-center justify-center text-ghibli-green hover:bg-white/50 hover:border-ghibli-green transition-all group"
@@ -203,7 +228,6 @@ const App = () => {
                 <span className="font-serif text-lg">Plant et nytt tre</span>
             </button>
 
-            {/* Existing Trees */}
             {trees.map(tree => (
                 <div key={tree.id} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-shadow p-6 flex flex-col justify-between border border-ghibli-earth/10 relative overflow-hidden h-64">
                     <div className="absolute -right-4 -top-4 w-24 h-24 bg-ghibli-green/10 rounded-full"></div>
@@ -217,6 +241,7 @@ const App = () => {
                         </p>
                     </div>
                     <div className="flex justify-end gap-2 mt-4">
+                         <Button onClick={() => handleDeleteTree(tree.id)} variant="danger" icon={<Trash2 size={16} />} title="Slett tre" />
                          <Button onClick={() => handleOpenTree(tree)} variant="primary">
                             Åpne
                          </Button>
@@ -233,25 +258,51 @@ const App = () => {
     return (
         <div className="min-h-screen flex flex-col">
             {/* Toolbar */}
-            <nav className="h-16 bg-white/90 backdrop-blur shadow-sm border-b border-ghibli-earth/10 flex items-center justify-between px-6 sticky top-0 z-50 no-print">
-                <div className="flex items-center gap-4">
+            <nav className="h-16 bg-white/90 backdrop-blur shadow-sm border-b border-ghibli-earth/10 flex items-center justify-between px-4 lg:px-6 sticky top-0 z-50 no-print">
+                <div className="flex items-center gap-2 lg:gap-4 overflow-hidden">
                     <button 
                         onClick={() => setCurrentView('GARDEN')}
-                        className="p-2 hover:bg-gray-100 rounded-full text-ghibli-wood transition-colors"
+                        className="p-2 hover:bg-gray-100 rounded-full text-ghibli-wood transition-colors flex-shrink-0"
                     >
                         <ArrowLeft />
                     </button>
-                    <h2 className="text-xl font-serif text-ghibli-darkGreen">{activeTree.name}</h2>
+                    <h2 className="text-lg lg:text-xl font-serif text-ghibli-darkGreen truncate">{activeTree.name}</h2>
                 </div>
                 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                    <Button 
+                        variant="secondary" 
+                        onClick={() => setIsSearching(true)} 
+                        icon={<Search size={16} />} 
+                        className="hidden md:flex"
+                    >
+                        Finn person
+                    </Button>
+                    <button 
+                        onClick={() => setIsSearching(true)} 
+                        className="md:hidden p-2 text-ghibli-wood hover:bg-black/5 rounded-full"
+                    >
+                        <Search size={20} />
+                    </button>
+                    
+                    <Button 
+                        variant="secondary" 
+                        onClick={() => setIsMergingTree(true)} 
+                        icon={<GitMerge size={16} />}
+                        title="Flett inn en annen hage"
+                        className="hidden md:flex"
+                    >
+                        Flett Hage
+                    </Button>
+
                     <Button 
                         variant="secondary" 
                         onClick={handleGenerateStory} 
                         icon={<Sparkles size={16} className={isGeneratingStory ? "animate-spin text-yellow-500" : "text-yellow-500"} />}
                         disabled={isGeneratingStory}
+                        className="hidden md:flex"
                     >
-                        {isGeneratingStory ? "Magien jobber..." : "Fortell Historie"}
+                        {isGeneratingStory ? "Magien jobber..." : "Historie"}
                     </Button>
                     <Button variant="secondary" onClick={handlePrint} icon={<Printer size={16} />}>
                         Utskrift
@@ -271,7 +322,7 @@ const App = () => {
                 />
             </main>
 
-            {/* AI Story Modal / Overlay */}
+            {/* AI Story Modal */}
             {aiStory && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 animate-in fade-in duration-300 backdrop-blur-sm no-print">
                     <div className="bg-[#fcfbf7] rounded-2xl max-w-2xl w-full p-8 shadow-2xl border-4 border-double border-ghibli-green/30 relative max-h-[80vh] overflow-y-auto">
@@ -279,7 +330,7 @@ const App = () => {
                             onClick={() => setAiStory(null)}
                             className="absolute top-4 right-4 text-ghibli-wood hover:text-red-500"
                         >
-                            <LogOut size={20} className="rotate-180" /> {/* Using logout icon as close for now */}
+                            <LogOut size={20} className="rotate-180" /> 
                         </button>
                         <div className="flex flex-col items-center mb-6">
                             <Sparkles className="text-yellow-500 mb-2" size={32} />
@@ -290,11 +341,78 @@ const App = () => {
                                 <p key={i} className="mb-4">{paragraph}</p>
                             ))}
                         </div>
-                        <div className="mt-8 pt-4 border-t border-ghibli-earth/10 text-center text-sm text-ghibli-earth/60 italic">
-                            Generert av magisk stjernestøv (Gemini AI)
-                        </div>
                     </div>
                 </div>
+            )}
+
+            {/* Search/Find Person Modal */}
+            {isSearching && (
+                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                    <div className="bg-[#fcfbf7] rounded-2xl max-w-md w-full p-6 shadow-2xl h-[500px] flex flex-col">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-serif text-ghibli-darkGreen">Finn Person</h3>
+                            <button onClick={() => setIsSearching(false)}><X size={20} /></button>
+                        </div>
+                        <input 
+                            type="text" 
+                            placeholder="Søk etter navn..." 
+                            className="w-full p-3 rounded-lg border border-ghibli-earth/20 mb-4 focus:outline-none focus:border-ghibli-green"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            autoFocus
+                        />
+                        <div className="flex-1 overflow-y-auto space-y-2">
+                            {Object.values(activeTree.nodes)
+                                .filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                                .map(p => (
+                                    <button 
+                                        key={p.id}
+                                        onClick={() => { setFocusedNodeId(p.id); setIsSearching(false); }}
+                                        className="w-full text-left p-3 hover:bg-ghibli-green/10 rounded-lg flex items-center gap-3 transition-colors"
+                                    >
+                                        <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden">
+                                            {p.photoUrl ? <img src={p.photoUrl} className="w-full h-full object-cover" /> : <User size={20} className="m-1.5 opacity-50"/>}
+                                        </div>
+                                        <div>
+                                            <div className="font-bold text-ghibli-darkGreen">{p.name}</div>
+                                            <div className="text-xs text-ghibli-earth">{p.birthDate || 'Ingen dato'}</div>
+                                        </div>
+                                    </button>
+                                ))
+                            }
+                        </div>
+                    </div>
+                 </div>
+            )}
+
+             {/* Merge Tree Modal */}
+             {isMergingTree && (
+                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                    <div className="bg-[#fcfbf7] rounded-2xl max-w-md w-full p-6 shadow-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-serif text-ghibli-darkGreen">Flett inn Hage</h3>
+                            <button onClick={() => setIsMergingTree(false)}><X size={20} /></button>
+                        </div>
+                        <p className="text-sm text-ghibli-earth mb-4">Velg en hage du vil hente personer fra. Dette vil legge alle personene inn i din nåværende hage, men de vil ikke være koblet sammen automatisk.</p>
+                        
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                            {trees.filter(t => t.id !== activeTree.id).length === 0 ? (
+                                <p className="text-center italic text-gray-400 py-4">Ingen andre hager funnet.</p>
+                            ) : (
+                                trees.filter(t => t.id !== activeTree.id).map(t => (
+                                    <button 
+                                        key={t.id}
+                                        onClick={() => handleMergeTree(t.id)}
+                                        className="w-full text-left p-4 border border-ghibli-earth/20 rounded-xl hover:bg-ghibli-green/10 transition-colors group"
+                                    >
+                                        <div className="font-bold text-ghibli-darkGreen group-hover:text-ghibli-green">{t.name}</div>
+                                        <div className="text-xs text-ghibli-earth">{Object.keys(t.nodes).length} personer</div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                 </div>
             )}
         </div>
     );

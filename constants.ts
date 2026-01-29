@@ -9,6 +9,7 @@ export const createNewPerson = (name: string = "Nytt Familiemedlem"): Person => 
   parents: [],
   children: [],
   spouses: [],
+  exSpouses: [],
 });
 
 export const createEmptyTree = (treeName: string): TreeData => {

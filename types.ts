@@ -10,6 +10,7 @@ export interface Person {
   parents: string[];
   children: string[];
   spouses: string[];
+  exSpouses: string[]; // New field for ex-partners
 }
 
 export interface TreeData {
