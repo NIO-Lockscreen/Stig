@@ -5,7 +5,7 @@ import { createEmptyTree, generateId } from './constants';
 import { Button } from './components/Button';
 import { TreeVisualization } from './components/TreeVisualization';
 import { generateFamilyStory } from './services/geminiService';
-import { Leaf, LogOut, Printer, Sparkles, Sprout, Share2, ArrowLeft, Download, Upload } from 'lucide-react';
+import { Leaf, LogOut, Printer, Sparkles, Sprout, Share2, ArrowLeft, Download, Upload, X } from 'lucide-react';
 
 const App = () => {
   // State
@@ -15,6 +15,11 @@ const App = () => {
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [aiStory, setAiStory] = useState<string | null>(null);
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  
+  // New Tree Modal State
+  const [isCreatingTree, setIsCreatingTree] = useState(false);
+  const [newTreeName, setNewTreeName] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load from local storage
@@ -38,14 +43,21 @@ const App = () => {
 
   const activeTree = trees.find(t => t.id === currentTreeId);
 
-  const handleCreateTree = () => {
-    const name = prompt("Hva skal treet hete?", "Familien Min");
-    if (!name) return;
-    const newTree = createEmptyTree(name);
+  const startCreateTree = () => {
+    setNewTreeName("Familien Min");
+    setIsCreatingTree(true);
+  };
+
+  const confirmCreateTree = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTreeName.trim()) return;
+
+    const newTree = createEmptyTree(newTreeName);
     setTrees(prev => [...prev, newTree]);
     setCurrentTreeId(newTree.id);
     setFocusedNodeId(newTree.rootId);
     setCurrentView('EDITOR');
+    setIsCreatingTree(false);
   };
 
   const handleOpenTree = (tree: TreeData) => {
@@ -182,7 +194,7 @@ const App = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* New Tree Card */}
             <button 
-                onClick={handleCreateTree}
+                onClick={startCreateTree}
                 className="h-64 rounded-2xl border-4 border-dashed border-ghibli-green/30 flex flex-col items-center justify-center text-ghibli-green hover:bg-white/50 hover:border-ghibli-green transition-all group"
             >
                 <div className="w-16 h-16 rounded-full bg-ghibli-green/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
@@ -293,6 +305,44 @@ const App = () => {
         {currentView === 'LOGIN' && <LoginView />}
         {currentView === 'GARDEN' && <GardenView />}
         {currentView === 'EDITOR' && <EditorView />}
+
+        {/* Create Tree Modal */}
+        {isCreatingTree && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                <form 
+                    onSubmit={confirmCreateTree}
+                    className="bg-[#fcfbf7] rounded-2xl max-w-md w-full p-8 shadow-2xl border-2 border-ghibli-green relative"
+                >
+                    <button 
+                        type="button"
+                        onClick={() => setIsCreatingTree(false)}
+                        className="absolute top-4 right-4 text-ghibli-wood/50 hover:text-ghibli-wood"
+                    >
+                        <X size={20} />
+                    </button>
+                    
+                    <h3 className="text-2xl font-serif text-ghibli-darkGreen mb-6 text-center">Gi navn til treet ditt</h3>
+                    
+                    <input 
+                        autoFocus
+                        type="text" 
+                        value={newTreeName}
+                        onChange={(e) => setNewTreeName(e.target.value)}
+                        className="w-full text-center text-xl font-serif p-2 bg-transparent border-b-2 border-ghibli-green/30 focus:border-ghibli-green focus:outline-none mb-8 placeholder-ghibli-earth/30"
+                        placeholder="F.eks. Familien Hansen"
+                    />
+
+                    <div className="flex justify-center gap-4">
+                        <Button type="button" variant="secondary" onClick={() => setIsCreatingTree(false)}>
+                            Avbryt
+                        </Button>
+                        <Button type="submit" variant="primary">
+                            Plant Treet
+                        </Button>
+                    </div>
+                </form>
+            </div>
+        )}
     </>
   );
 };
