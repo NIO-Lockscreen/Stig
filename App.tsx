@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TreeData, ViewMode } from './types';
 import { createEmptyTree, generateId } from './constants';
 import { Button } from './components/Button';
 import { TreeVisualization } from './components/TreeVisualization';
 import { generateFamilyStory } from './services/geminiService';
-import { Leaf, LogOut, Printer, Sparkles, Sprout, Share2, ArrowLeft } from 'lucide-react';
+import { Leaf, LogOut, Printer, Sparkles, Sprout, Share2, ArrowLeft, Download, Upload } from 'lucide-react';
 
 const App = () => {
   // State
@@ -15,6 +15,7 @@ const App = () => {
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [aiStory, setAiStory] = useState<string | null>(null);
   const [isGeneratingStory, setIsGeneratingStory] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load from local storage
   useEffect(() => {
@@ -72,6 +73,60 @@ const App = () => {
     setIsGeneratingStory(false);
   };
 
+  // --- EXPORT / IMPORT LOGIC ---
+
+  const exportData = () => {
+    const dataStr = JSON.stringify(trees, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `livets-tre-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const triggerImport = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const content = e.target?.result as string;
+            const importedData = JSON.parse(content);
+
+            if (Array.isArray(importedData)) {
+                // Filter out duplicates based on ID to avoid crashes, or just append distinct ones
+                const newTrees = importedData.filter((importedTree: TreeData) => 
+                    !trees.some(existing => existing.id === importedTree.id)
+                );
+                
+                if (newTrees.length === 0 && importedData.length > 0) {
+                     alert("Dataen du importerte finnes allerede (samme ID).");
+                } else {
+                    setTrees(prev => [...prev, ...newTrees]);
+                    alert(`Importerte ${newTrees.length} trær vellykket!`);
+                }
+            } else {
+                alert("Filformatet ser feil ut. Det må være en backup fra denne siden.");
+            }
+        } catch (error) {
+            console.error("Import error", error);
+            alert("Kunne ikke lese filen. Er det en gyldig JSON-fil?");
+        }
+        // Reset input
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    reader.readAsText(file);
+  };
+
+
   // --- VIEWS ---
 
   const LoginView = () => (
@@ -97,14 +152,31 @@ const App = () => {
 
   const GardenView = () => (
     <div className="min-h-screen p-8 max-w-6xl mx-auto">
-        <header className="flex justify-between items-center mb-12">
+        <header className="flex flex-col md:flex-row justify-between items-center mb-12 gap-4">
             <h2 className="text-3xl font-serif text-ghibli-darkGreen flex items-center gap-3">
                 <Sprout className="text-ghibli-green" />
                 Min Hage
             </h2>
-            <Button variant="ghost" onClick={() => setCurrentView('LOGIN')} icon={<LogOut size={18} />}>
-                Logg ut
-            </Button>
+            
+            <div className="flex flex-wrap justify-center gap-2">
+                <Button variant="secondary" onClick={exportData} icon={<Download size={16} />}>
+                    Eksporter
+                </Button>
+                <Button variant="secondary" onClick={triggerImport} icon={<Upload size={16} />}>
+                    Importer
+                </Button>
+                <Button variant="ghost" onClick={() => setCurrentView('LOGIN')} icon={<LogOut size={18} />}>
+                    Logg ut
+                </Button>
+                {/* Hidden File Input */}
+                <input 
+                    type="file" 
+                    accept=".json" 
+                    ref={fileInputRef} 
+                    onChange={handleFileImport} 
+                    className="hidden" 
+                />
+            </div>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

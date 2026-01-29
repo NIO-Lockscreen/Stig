@@ -2,16 +2,139 @@ import React from 'react';
 import { Person, TreeData } from '../types';
 import { Plus, User, Trash2, Heart } from 'lucide-react';
 
-interface NodeProps {
-  nodeId: string;
+// Helper component extracted to prevent re-creation on every render (fixes input focus bug)
+const NodeCard: React.FC<{
+  personId: string;
   tree: TreeData;
   onUpdate: (updatedTree: TreeData) => void;
-  isRoot?: boolean;
-  level: number;
-  maxLevels?: number;
-}
+  setFocusedNodeId: (id: string) => void;
+  removeNode: (id: string) => void;
+  addSpouse: (id: string) => void;
+  isMain?: boolean;
+}> = ({ personId, tree, onUpdate, setFocusedNodeId, removeNode, addSpouse, isMain = false }) => {
+  const person = tree.nodes[personId];
+  if (!person) return null;
 
-// A simplified vertical tree layout component
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const updated = { ...tree };
+    updated.nodes[personId] = { ...updated.nodes[personId], name: e.target.value };
+    onUpdate(updated);
+  };
+
+  const handleBirthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const updated = { ...tree };
+    updated.nodes[personId] = { ...updated.nodes[personId], birthDate: e.target.value };
+    onUpdate(updated);
+  };
+
+  const handleDeathChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const updated = { ...tree };
+    updated.nodes[personId] = { ...updated.nodes[personId], deathDate: e.target.value };
+    onUpdate(updated);
+  };
+
+  const handleGenderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const updated = { ...tree };
+    updated.nodes[personId] = { 
+        ...updated.nodes[personId], 
+        gender: e.target.value as 'male' | 'female' | 'other' 
+    };
+    onUpdate(updated);
+  };
+
+  return (
+    <div 
+      className={`
+        relative group flex flex-col items-center p-4 rounded-xl border-2 transition-all duration-300
+        ${isMain 
+          ? 'bg-ghibli-cream border-ghibli-green shadow-xl scale-110 z-10 w-64' 
+          : 'bg-white/80 border-ghibli-earth/20 hover:border-ghibli-green hover:shadow-lg w-48 opacity-90 hover:opacity-100'
+        }
+      `}
+    >
+      {/* Actions Overlay (Only visible on hover or if main) */}
+      <div className={`absolute -top-3 -right-3 flex gap-1 ${isMain ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity z-20`}>
+         {!isMain && (
+           <button 
+              onClick={() => setFocusedNodeId(personId)}
+              className="p-2 bg-ghibli-sky text-white rounded-full shadow-md hover:bg-blue-400"
+              title="Fokuser på denne personen"
+           >
+             <User size={14} />
+           </button>
+         )}
+         <button 
+           onClick={() => removeNode(personId)}
+           className="p-2 bg-red-400 text-white rounded-full shadow-md hover:bg-red-500"
+           title="Slett"
+         >
+           <Trash2 size={14} />
+         </button>
+      </div>
+
+      {/* Photo Placeholder */}
+      <div className="relative mb-3">
+        <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-ghibli-earth/30 bg-gray-100">
+           {person.photoUrl ? (
+              <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
+           ) : (
+              <div className="w-full h-full flex items-center justify-center text-ghibli-wood/40">
+                 <User size={24} />
+              </div>
+           )}
+        </div>
+        {/* Add Spouse Button */}
+        {isMain && (
+           <button 
+             onClick={() => addSpouse(personId)}
+             className="absolute -bottom-1 -right-1 bg-pink-400 text-white p-1 rounded-full hover:bg-pink-500 shadow-sm"
+             title="Legg til partner"
+           >
+              <Heart size={12} />
+           </button>
+        )}
+      </div>
+
+      {/* Inputs */}
+      <input 
+        value={person.name}
+        onChange={handleNameChange}
+        className="w-full text-center font-serif font-bold text-ghibli-wood bg-transparent border-b border-transparent hover:border-ghibli-green focus:border-ghibli-green focus:outline-none mb-1"
+        placeholder="Navn"
+      />
+      
+      {/* Gender Selection */}
+      <select
+        value={person.gender || 'other'}
+        onChange={handleGenderChange}
+        className="w-full text-center text-xs text-ghibli-wood/70 bg-transparent border-b border-transparent hover:border-ghibli-green focus:outline-none mb-2 cursor-pointer appearance-none py-1"
+        style={{ textAlignLast: 'center' }}
+        title="Velg kjønn"
+      >
+        <option value="male">Mann</option>
+        <option value="female">Kvinne</option>
+        <option value="other">Annet / Ukjent</option>
+      </select>
+
+      <div className="flex gap-2 w-full">
+          <input 
+          value={person.birthDate}
+          onChange={handleBirthChange}
+          className="w-1/2 text-center text-xs text-ghibli-wood/70 bg-transparent border-b border-transparent hover:border-ghibli-green focus:outline-none"
+          placeholder="Født (År)"
+          />
+           <input 
+          value={person.deathDate || ''}
+          onChange={handleDeathChange}
+          className="w-1/2 text-center text-xs text-ghibli-wood/70 bg-transparent border-b border-transparent hover:border-ghibli-green focus:outline-none"
+          placeholder="Død (År)"
+          />
+      </div>
+    </div>
+  );
+};
+
+// Main Tree Visualization Component
 export const TreeVisualization: React.FC<{
   tree: TreeData;
   onUpdate: (t: TreeData) => void;
@@ -116,101 +239,6 @@ export const TreeVisualization: React.FC<{
     onUpdate(updatedTree);
   }
 
-  // Helper component for a single person card
-  const NodeCard: React.FC<{ personId: string; isMain?: boolean }> = ({ personId, isMain = false }) => {
-    const person = tree.nodes[personId];
-    if (!person) return null;
-
-    return (
-      <div 
-        className={`
-          relative group flex flex-col items-center p-4 rounded-xl border-2 transition-all duration-300
-          ${isMain 
-            ? 'bg-ghibli-cream border-ghibli-green shadow-xl scale-110 z-10 w-64' 
-            : 'bg-white/80 border-ghibli-earth/20 hover:border-ghibli-green hover:shadow-lg w-48 opacity-90 hover:opacity-100'
-          }
-        `}
-      >
-        {/* Actions Overlay (Only visible on hover or if main) */}
-        <div className={`absolute -top-3 -right-3 flex gap-1 ${isMain ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity z-20`}>
-           {!isMain && (
-             <button 
-                onClick={() => setFocusedNodeId(personId)}
-                className="p-2 bg-ghibli-sky text-white rounded-full shadow-md hover:bg-blue-400"
-                title="Fokuser på denne personen"
-             >
-               <User size={14} />
-             </button>
-           )}
-           <button 
-             onClick={() => removeNode(personId)}
-             className="p-2 bg-red-400 text-white rounded-full shadow-md hover:bg-red-500"
-             title="Slett"
-           >
-             <Trash2 size={14} />
-           </button>
-        </div>
-
-        {/* Photo Placeholder */}
-        <div className="relative mb-3">
-          <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-ghibli-earth/30 bg-gray-100">
-             {person.photoUrl ? (
-                <img src={person.photoUrl} alt={person.name} className="w-full h-full object-cover" />
-             ) : (
-                <div className="w-full h-full flex items-center justify-center text-ghibli-wood/40">
-                   <User size={24} />
-                </div>
-             )}
-          </div>
-          {/* Add Spouse Button */}
-          {isMain && (
-             <button 
-               onClick={() => addSpouse(personId)}
-               className="absolute -bottom-1 -right-1 bg-pink-400 text-white p-1 rounded-full hover:bg-pink-500 shadow-sm"
-               title="Legg til partner"
-             >
-                <Heart size={12} />
-             </button>
-          )}
-        </div>
-
-        {/* Inputs */}
-        <input 
-          value={person.name}
-          onChange={(e) => {
-            const updated = {...tree};
-            updated.nodes[personId].name = e.target.value;
-            onUpdate(updated);
-          }}
-          className="w-full text-center font-serif font-bold text-ghibli-wood bg-transparent border-b border-transparent hover:border-ghibli-green focus:border-ghibli-green focus:outline-none mb-1"
-          placeholder="Navn"
-        />
-        <div className="flex gap-2 w-full">
-            <input 
-            value={person.birthDate}
-            onChange={(e) => {
-                const updated = {...tree};
-                updated.nodes[personId].birthDate = e.target.value;
-                onUpdate(updated);
-            }}
-            className="w-1/2 text-center text-xs text-ghibli-wood/70 bg-transparent border-b border-transparent hover:border-ghibli-green focus:outline-none"
-            placeholder="Født (År)"
-            />
-             <input 
-            value={person.deathDate || ''}
-            onChange={(e) => {
-                const updated = {...tree};
-                updated.nodes[personId].deathDate = e.target.value;
-                onUpdate(updated);
-            }}
-            className="w-1/2 text-center text-xs text-ghibli-wood/70 bg-transparent border-b border-transparent hover:border-ghibli-green focus:outline-none"
-            placeholder="Død (År)"
-            />
-        </div>
-      </div>
-    );
-  };
-
   // Recursive-ish Rendering for visualization
   if (!focusedNode) return <div>Laster...</div>;
 
@@ -223,7 +251,15 @@ export const TreeVisualization: React.FC<{
         <div className="flex gap-8 items-end">
             {focusedNode.parents.length > 0 ? (
                 focusedNode.parents.map(pid => (
-                    <NodeCard key={pid} personId={pid} />
+                    <NodeCard 
+                      key={pid} 
+                      personId={pid} 
+                      tree={tree}
+                      onUpdate={onUpdate}
+                      setFocusedNodeId={setFocusedNodeId}
+                      removeNode={removeNode}
+                      addSpouse={addSpouse}
+                    />
                 ))
             ) : (
                 <div className="p-4 border-2 border-dashed border-ghibli-green/30 rounded-xl text-ghibli-green/50 text-sm">
@@ -247,14 +283,28 @@ export const TreeVisualization: React.FC<{
       <div className="relative">
          <div className="absolute top-1/2 left-0 w-full h-0.5 bg-ghibli-green/20 -z-10 transform -translate-y-1/2"></div>
          <div className="flex gap-8 items-center">
-             {/* Siblings could go here, but omitted for MVP simplicity */}
              
-             <NodeCard personId={focusedNodeId} isMain={true} />
+             <NodeCard 
+               personId={focusedNodeId} 
+               isMain={true}
+               tree={tree}
+               onUpdate={onUpdate}
+               setFocusedNodeId={setFocusedNodeId}
+               removeNode={removeNode}
+               addSpouse={addSpouse}
+             />
              
              {focusedNode.spouses.map(spouseId => (
                  <div key={spouseId} className="relative">
                     <div className="absolute top-1/2 -left-4 w-4 h-0.5 bg-ghibli-green/50"></div>
-                    <NodeCard personId={spouseId} />
+                    <NodeCard 
+                      personId={spouseId}
+                      tree={tree}
+                      onUpdate={onUpdate}
+                      setFocusedNodeId={setFocusedNodeId}
+                      removeNode={removeNode}
+                      addSpouse={addSpouse}
+                    />
                  </div>
              ))}
          </div>
@@ -270,7 +320,14 @@ export const TreeVisualization: React.FC<{
                  focusedNode.children.map(cid => (
                      <div key={cid} className="flex flex-col items-center">
                         <div className="w-0.5 h-4 bg-ghibli-green/30 mb-2"></div>
-                        <NodeCard personId={cid} />
+                        <NodeCard 
+                          personId={cid}
+                          tree={tree}
+                          onUpdate={onUpdate}
+                          setFocusedNodeId={setFocusedNodeId}
+                          removeNode={removeNode}
+                          addSpouse={addSpouse}
+                        />
                      </div>
                  ))
              ) : (
