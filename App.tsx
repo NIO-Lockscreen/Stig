@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { INITIAL_CELLS, TOTAL_NUMBERS } from './constants';
 import { CellData, Difficulty, GameMode, GameResult, GameStatus, Player } from './types';
 import { calculateResults, getAvailableNumbers } from './utils/gameLogic';
@@ -28,6 +28,9 @@ const App: React.FC = () => {
   const [result, setResult] = useState<GameResult | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [turnMessage, setTurnMessage] = useState<string>('');
+
+  // Derived state for real-time feedback
+  const realTimeResults = useMemo(() => calculateResults(cells), [cells]);
 
   // Load Names on Mount
   useEffect(() => {
@@ -276,7 +279,7 @@ const App: React.FC = () => {
           onCellClick={handleCellClick}
           isValidMove={(id) => isValidMove(id)}
           currentPlayer={currentPlayer}
-          results={result ? result.rowResults : null}
+          results={realTimeResults.rowResults}
           playerNames={playerNames}
           onEditName={(p) => setEditingPlayer(p)}
         />

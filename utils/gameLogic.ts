@@ -49,55 +49,57 @@ export const calculateResults = (cells: CellData[]): GameResult => {
 
   // Master Key is at index 9
   const masterKeyCell = cells.find(c => c.type === 'master');
-  if (!masterKeyCell || masterKeyCell.value === null) {
-    throw new Error("Master key missing");
-  }
-  const masterVal = masterKeyCell.value;
-  const masterIsEven = isEven(masterVal);
+  
+  // We do not throw error if master key is missing, simply return current state (which might be empty)
+  const masterVal = masterKeyCell?.value;
 
-  // Process rows 0, 1, 2
-  for (let r = 0; r < 3; r++) {
-    const p1Cell = cells.find(c => c.row === r && c.type === 'p1');
-    const p2Cell = cells.find(c => c.row === r && c.type === 'p2');
-    const keyCell = cells.find(c => c.row === r && c.type === 'key');
+  if (masterVal !== null && masterVal !== undefined) {
+      const masterIsEven = isEven(masterVal);
 
-    if (!p1Cell || !p2Cell || !keyCell || 
-        p1Cell.value === null || p2Cell.value === null || keyCell.value === null) {
-        // Should not happen if game is finished
-        continue;
-    }
+      // Process rows 0, 1, 2
+      for (let r = 0; r < 3; r++) {
+        const p1Cell = cells.find(c => c.row === r && c.type === 'p1');
+        const p2Cell = cells.find(c => c.row === r && c.type === 'p2');
+        const keyCell = cells.find(c => c.row === r && c.type === 'key');
 
-    const keyIsEven = isEven(keyCell.value);
-    
-    // Parity Check
-    // "Hvis Master key er samme type tall som Key ... vil spilleren med lavest nummer vinne."
-    // "Hvis master key er ulik type tall som Key, vil spilleren med høyest nummer vinne."
-    const masterMatchesKey = masterIsEven === keyIsEven;
-    
-    let winner: 'p1' | 'p2' | 'tie' = 'tie';
-    const reason: 'low' | 'high' = masterMatchesKey ? 'low' : 'high';
+        if (!p1Cell || !p2Cell || !keyCell || 
+            p1Cell.value === null || p2Cell.value === null || keyCell.value === null) {
+            // Row is incomplete
+            continue;
+        }
 
-    if (reason === 'low') {
-      if (p1Cell.value < p2Cell.value) winner = 'p1';
-      else if (p2Cell.value < p1Cell.value) winner = 'p2';
-    } else {
-      if (p1Cell.value > p2Cell.value) winner = 'p1';
-      else if (p2Cell.value > p1Cell.value) winner = 'p2';
-    }
+        const keyIsEven = isEven(keyCell.value);
+        
+        // Parity Check
+        // "Hvis Master key er samme type tall som Key ... vil spilleren med lavest nummer vinne."
+        // "Hvis master key er ulik type tall som Key, vil spilleren med høyest nummer vinne."
+        const masterMatchesKey = masterIsEven === keyIsEven;
+        
+        let winner: 'p1' | 'p2' | 'tie' = 'tie';
+        const reason: 'low' | 'high' = masterMatchesKey ? 'low' : 'high';
 
-    if (winner === 'p1') p1Score++;
-    if (winner === 'p2') p2Score++;
+        if (reason === 'low') {
+          if (p1Cell.value < p2Cell.value) winner = 'p1';
+          else if (p2Cell.value < p1Cell.value) winner = 'p2';
+        } else {
+          if (p1Cell.value > p2Cell.value) winner = 'p1';
+          else if (p2Cell.value > p1Cell.value) winner = 'p2';
+        }
 
-    rowResults.push({
-      rowId: r,
-      winner,
-      reason,
-      p1Value: p1Cell.value,
-      p2Value: p2Cell.value,
-      keyValue: keyCell.value,
-      masterValue: masterVal,
-      masterMatchesKey
-    });
+        if (winner === 'p1') p1Score++;
+        if (winner === 'p2') p2Score++;
+
+        rowResults.push({
+          rowId: r,
+          winner,
+          reason,
+          p1Value: p1Cell.value,
+          p2Value: p2Cell.value,
+          keyValue: keyCell.value,
+          masterValue: masterVal,
+          masterMatchesKey
+        });
+      }
   }
 
   let overallWinner: 'p1' | 'p2' | 'tie' = 'tie';

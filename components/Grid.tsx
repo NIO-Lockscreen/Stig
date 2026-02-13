@@ -1,6 +1,6 @@
 import React from 'react';
 import { CellData, Player, RowResult } from '../types';
-import { ArrowDown, Hash, KeyRound, Trophy, Pencil } from 'lucide-react';
+import { ArrowDown, ArrowUp, Hash, KeyRound, Trophy, Pencil } from 'lucide-react';
 
 interface GridProps {
   cells: CellData[];
@@ -31,6 +31,19 @@ export const Grid: React.FC<GridProps> = ({
   };
 
   const getRowResult = (rowIdx: number) => results?.find(r => r.rowId === rowIdx);
+
+  // Helper to determine strategy for a row if known
+  const getRowStrategy = (rowIdx: number): 'low' | 'high' | null => {
+    const master = cells.find(c => c.type === 'master');
+    const key = cells.find(c => c.row === rowIdx && c.type === 'key');
+    
+    if (master?.value != null && key?.value != null) {
+        const mEven = master.value % 2 === 0;
+        const kEven = key.value % 2 === 0;
+        return mEven === kEven ? 'low' : 'high';
+    }
+    return null;
+  };
 
   // Helper to determine cell styling
   const getCellStyle = (cell: CellData) => {
@@ -93,6 +106,7 @@ export const Grid: React.FC<GridProps> = ({
         {rows.map(rowIdx => {
            const rowCells = cells.filter(c => c.row === rowIdx).sort((a,b) => a.id - b.id);
            const result = getRowResult(rowIdx);
+           const strategy = getRowStrategy(rowIdx);
            
            return (
              <React.Fragment key={rowIdx}>
@@ -103,6 +117,17 @@ export const Grid: React.FC<GridProps> = ({
                     className={`${getCellStyle(cell)} h-20 w-full`}
                   >
                     {getCellContent(cell)}
+
+                    {/* Strategy Hint for empty player cells */}
+                    {cell.value === null && (cell.type === 'p1' || cell.type === 'p2') && strategy && (
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20 text-stone-600 animate-pulse">
+                         {strategy === 'high' ? (
+                           <ArrowUp size={28} strokeWidth={2.5} />
+                         ) : (
+                           <ArrowDown size={28} strokeWidth={2.5} />
+                         )}
+                      </div>
+                    )}
                     
                     {/* Winner Indicator */}
                     {result && result.winner !== 'tie' && (
