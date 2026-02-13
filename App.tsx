@@ -218,6 +218,10 @@ const App: React.FC = () => {
           </div>
         </div>
 
+        <div className="mt-6 text-stone-400 text-xs font-bold tracking-widest uppercase opacity-50">
+          Game by Stig Rune Bergly
+        </div>
+
         {showRules && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setShowRules(false)}>
             <div className="bg-white p-6 rounded-2xl max-w-md shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
@@ -285,6 +289,10 @@ const App: React.FC = () => {
             playerNames={playerNames}
           />
         )}
+
+        <div className="mt-auto py-4 text-stone-400 text-xs font-bold tracking-widest uppercase opacity-50">
+          Game by Stig Rune Bergly
+        </div>
 
       </main>
 
