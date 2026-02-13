@@ -5,9 +5,10 @@ import { ArrowRight, RotateCcw } from 'lucide-react';
 interface ResultsProps {
   result: GameResult;
   onRestart: () => void;
+  playerNames: { p1: string; p2: string };
 }
 
-export const Results: React.FC<ResultsProps> = ({ result, onRestart }) => {
+export const Results: React.FC<ResultsProps> = ({ result, onRestart, playerNames }) => {
   const isWinnerP1 = result.overallWinner === 'p1';
   const isWinnerP2 = result.overallWinner === 'p2';
   
@@ -16,16 +17,16 @@ export const Results: React.FC<ResultsProps> = ({ result, onRestart }) => {
       <div className="text-center mb-6">
         <h2 className="text-3xl font-bold text-ink mb-2">
           {result.overallWinner === 'tie' ? 'Det ble uavgjort!' : 
-           result.overallWinner === 'p1' ? 'Spiller 1 Vinner!' : 'Spiller 2 Vinner!'}
+           result.overallWinner === 'p1' ? `${playerNames.p1} Vinner!` : `${playerNames.p2} Vinner!`}
         </h2>
         <div className="flex justify-center gap-8 text-xl font-bold">
-          <div className={`flex flex-col ${isWinnerP1 ? 'text-p1 scale-110' : 'text-stone-400'}`}>
-            <span>P1</span>
+          <div className={`flex flex-col items-center ${isWinnerP1 ? 'text-p1 scale-110' : 'text-stone-400'}`}>
+            <span className="text-sm uppercase tracking-wide opacity-80">{playerNames.p1}</span>
             <span className="text-3xl">{result.p1Score}</span>
           </div>
           <div className="text-stone-300 py-2">vs</div>
-          <div className={`flex flex-col ${isWinnerP2 ? 'text-p2 scale-110' : 'text-stone-400'}`}>
-            <span>P2</span>
+          <div className={`flex flex-col items-center ${isWinnerP2 ? 'text-p2 scale-110' : 'text-stone-400'}`}>
+            <span className="text-sm uppercase tracking-wide opacity-80">{playerNames.p2}</span>
             <span className="text-3xl">{result.p2Score}</span>
           </div>
         </div>
@@ -38,7 +39,7 @@ export const Results: React.FC<ResultsProps> = ({ result, onRestart }) => {
             <div className="flex justify-between items-center mb-2">
               <span className="font-bold text-stone-500">Rad {idx + 1}</span>
               <span className={`font-bold px-2 py-0.5 rounded text-xs ${row.winner === 'p1' ? 'bg-p1 text-white' : row.winner === 'p2' ? 'bg-p2 text-white' : 'bg-stone-300'}`}>
-                {row.winner === 'tie' ? 'Tie' : row.winner === 'p1' ? 'P1 (+1p)' : 'P2 (+1p)'}
+                {row.winner === 'tie' ? 'Tie' : row.winner === 'p1' ? `${playerNames.p1} (+1p)` : `${playerNames.p2} (+1p)`}
               </span>
             </div>
             

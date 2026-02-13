@@ -9,6 +9,7 @@ export interface CellData {
 
 export type GameStatus = 'menu' | 'playing' | 'finished';
 export type GameMode = 'pvp' | 'cpu';
+export type Difficulty = 'easy' | 'medium' | 'hard';
 
 export interface RowResult {
   rowId: number;

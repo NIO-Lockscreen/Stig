@@ -1,6 +1,6 @@
 import React from 'react';
 import { CellData, Player, RowResult } from '../types';
-import { ArrowDown, Hash, KeyRound, Trophy } from 'lucide-react';
+import { ArrowDown, Hash, KeyRound, Trophy, Pencil } from 'lucide-react';
 
 interface GridProps {
   cells: CellData[];
@@ -8,6 +8,8 @@ interface GridProps {
   isValidMove: (id: number) => boolean;
   currentPlayer: Player;
   results: RowResult[] | null;
+  playerNames: { p1: string; p2: string };
+  onEditName: (player: Player) => void;
 }
 
 export const Grid: React.FC<GridProps> = ({ 
@@ -15,7 +17,9 @@ export const Grid: React.FC<GridProps> = ({
   onCellClick, 
   isValidMove, 
   currentPlayer,
-  results 
+  results,
+  playerNames,
+  onEditName
 }) => {
   
   const getCellContent = (cell: CellData) => {
@@ -61,10 +65,26 @@ export const Grid: React.FC<GridProps> = ({
   return (
     <div className="flex flex-col items-center gap-2">
       
-      {/* Header Labels */}
-      <div className="grid grid-cols-3 gap-3 w-full max-w-[300px] text-center font-bold text-stone-400 text-sm mb-1">
-        <div className="text-p1">Player 1</div>
-        <div className="text-p2">Player 2</div>
+      {/* Header Labels - Now Clickable */}
+      <div className="grid grid-cols-3 gap-3 w-full max-w-[300px] text-center font-bold text-sm mb-1">
+        <button 
+          onClick={() => onEditName('p1')}
+          className="group flex items-center justify-center gap-1 text-p1 hover:text-p1-dark transition-colors"
+          title="Endre navn"
+        >
+          <span className="truncate max-w-[80px]">{playerNames.p1}</span>
+          <Pencil size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+        
+        <button 
+          onClick={() => onEditName('p2')}
+          className="group flex items-center justify-center gap-1 text-p2 hover:text-p2-dark transition-colors"
+          title="Endre navn"
+        >
+          <span className="truncate max-w-[80px]">{playerNames.p2}</span>
+          <Pencil size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+        
         <div className="text-key-DEFAULT">Key</div>
       </div>
 

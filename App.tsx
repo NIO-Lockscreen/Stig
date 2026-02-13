@@ -1,35 +1,81 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { INITIAL_CELLS, TOTAL_NUMBERS } from './constants';
-import { CellData, GameMode, GameResult, GameStatus, Player } from './types';
+import { CellData, Difficulty, GameMode, GameResult, GameStatus, Player } from './types';
 import { calculateResults, getAvailableNumbers } from './utils/gameLogic';
+import { getBestMove } from './utils/ai';
 import { Grid } from './components/Grid';
 import { NumberPickerModal } from './components/NumberPickerModal';
+import { NameEditModal } from './components/NameEditModal';
 import { Results } from './components/Results';
-import { Users, User, Info, Cpu } from 'lucide-react';
+import { Users, User, Info, Cpu, ChevronLeft } from 'lucide-react';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<GameStatus>('menu');
   const [cells, setCells] = useState<CellData[]>(INITIAL_CELLS);
   const [mode, setMode] = useState<GameMode>('pvp');
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [currentPlayer, setCurrentPlayer] = useState<Player>('p1');
   
-  // New state for the modal interaction
+  // Menu State
+  const [menuState, setMenuState] = useState<'main' | 'cpu_difficulty'>('main');
+
+  // Name management
+  const [playerNames, setPlayerNames] = useState({ p1: 'Spiller 1', p2: 'Spiller 2' });
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+
+  // Interaction State
   const [activeCellId, setActiveCellId] = useState<number | null>(null);
-  
   const [result, setResult] = useState<GameResult | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [turnMessage, setTurnMessage] = useState<string>('');
 
+  // Load Names on Mount
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const stored = localStorage.getItem('masterkey_names');
+    
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed.date === today) {
+          setPlayerNames(parsed.names);
+        } else {
+          localStorage.removeItem('masterkey_names');
+        }
+      } catch (e) {
+        // Error reading
+      }
+    }
+  }, []);
+
+  const handleUpdateName = (name: string) => {
+    if (editingPlayer) {
+      const newNames = { ...playerNames, [editingPlayer]: name };
+      setPlayerNames(newNames);
+      
+      const today = new Date().toISOString().split('T')[0];
+      localStorage.setItem('masterkey_names', JSON.stringify({
+        date: today,
+        names: newNames
+      }));
+      
+      setEditingPlayer(null);
+    }
+  };
+
   // Determine available numbers
   const availableNumbers = getAvailableNumbers(cells);
 
-  const startNewGame = (selectedMode: GameMode) => {
+  const startNewGame = (selectedMode: GameMode, selectedDiff?: Difficulty) => {
     setMode(selectedMode);
+    if (selectedDiff) setDifficulty(selectedDiff);
+    
     setCells(INITIAL_CELLS.map(c => ({ ...c, value: null })));
     setCurrentPlayer('p1');
     setStatus('playing');
     setResult(null);
     setActiveCellId(null);
+    setMenuState('main');
   };
 
   // CPU Move Logic
@@ -37,26 +83,17 @@ const App: React.FC = () => {
     if (status === 'playing' && mode === 'cpu' && currentPlayer === 'p2') {
       const timer = setTimeout(() => {
         makeCpuMove();
-      }, 1000); // 1s delay for natural feel
+      }, 600); // Slightly faster response
       return () => clearTimeout(timer);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, currentPlayer, mode, cells]);
 
   const makeCpuMove = () => {
-    const availableNums = getAvailableNumbers(cells);
-    const emptyCells = cells.filter(c => c.value === null);
-
-    if (availableNums.length === 0 || emptyCells.length === 0) return;
-
-    // Simple AI: Random Move
-    const randomNumIndex = Math.floor(Math.random() * availableNums.length);
-    const randomCellIndex = Math.floor(Math.random() * emptyCells.length);
-
-    const num = availableNums[randomNumIndex];
-    const cellId = emptyCells[randomCellIndex].id;
-
-    handlePlaceNumber(cellId, num);
+    const move = getBestMove(cells, difficulty);
+    if (move) {
+      handlePlaceNumber(move.cellId, move.number);
+    }
   };
 
   const handleCellClick = (cellId: number) => {
@@ -104,10 +141,11 @@ const App: React.FC = () => {
       if (mode === 'cpu' && currentPlayer === 'p2') {
         setTurnMessage("Datamaskinen tenker...");
       } else {
-        setTurnMessage(currentPlayer === 'p1' ? "Spiller 1, velg en rute" : "Spiller 2, velg en rute");
+        const name = currentPlayer === 'p1' ? playerNames.p1 : playerNames.p2;
+        setTurnMessage(`${name}, velg en rute`);
       }
     }
-  }, [status, currentPlayer, mode]);
+  }, [status, currentPlayer, mode, playerNames]);
 
   const isValidMove = useCallback((cellId: number) => {
     if (status !== 'playing') return false;
@@ -121,26 +159,57 @@ const App: React.FC = () => {
   if (status === 'menu') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-paper">
-        <div className="max-w-sm w-full bg-white rounded-3xl shadow-xl p-8 border border-stone-100 text-center">
+        <div className="max-w-sm w-full bg-white rounded-3xl shadow-xl p-8 border border-stone-100 text-center transition-all">
           <h1 className="text-4xl font-extrabold text-ink mb-2 tracking-tight">MasterKey</h1>
           <p className="text-stone-500 mb-8">Et koselig strategispill</p>
 
-          <div className="space-y-4">
-            <button 
-              onClick={() => startNewGame('pvp')}
-              className="w-full py-4 bg-p1/10 hover:bg-p1/20 text-p1-dark rounded-xl font-bold flex items-center justify-center gap-3 transition-colors border-2 border-transparent hover:border-p1/20"
-            >
-              <Users size={24} />
-              Spill mot Venn
-            </button>
-            <button 
-              onClick={() => startNewGame('cpu')}
-              className="w-full py-4 bg-stone-100 hover:bg-stone-200 text-ink rounded-xl font-bold flex items-center justify-center gap-3 transition-colors border-2 border-transparent hover:border-stone-300"
-            >
-              <Cpu size={24} />
-              Spill mot CPU
-            </button>
-          </div>
+          {menuState === 'main' ? (
+            <div className="space-y-4 animate-fade-in-up">
+              <button 
+                onClick={() => startNewGame('pvp')}
+                className="w-full py-4 bg-p1/10 hover:bg-p1/20 text-p1-dark rounded-xl font-bold flex items-center justify-center gap-3 transition-colors border-2 border-transparent hover:border-p1/20"
+              >
+                <Users size={24} />
+                Spill mot Venn
+              </button>
+              <button 
+                onClick={() => setMenuState('cpu_difficulty')}
+                className="w-full py-4 bg-stone-100 hover:bg-stone-200 text-ink rounded-xl font-bold flex items-center justify-center gap-3 transition-colors border-2 border-transparent hover:border-stone-300"
+              >
+                <Cpu size={24} />
+                Spill mot CPU
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3 animate-fade-in-up">
+              <div className="text-sm font-bold text-stone-400 uppercase tracking-widest mb-2">Velg vanskelighetsgrad</div>
+              <button 
+                onClick={() => startNewGame('cpu', 'easy')}
+                className="w-full py-3 bg-green-50 hover:bg-green-100 text-green-700 rounded-xl font-bold border-2 border-transparent hover:border-green-200 transition-colors"
+              >
+                Lett
+              </button>
+              <button 
+                onClick={() => startNewGame('cpu', 'medium')}
+                className="w-full py-3 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-xl font-bold border-2 border-transparent hover:border-yellow-200 transition-colors"
+              >
+                Medium
+              </button>
+              <button 
+                onClick={() => startNewGame('cpu', 'hard')}
+                className="w-full py-3 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-bold border-2 border-transparent hover:border-red-200 transition-colors"
+              >
+                Vanskelig
+              </button>
+              
+              <button 
+                onClick={() => setMenuState('main')}
+                className="w-full py-2 text-stone-400 hover:text-stone-600 font-bold text-sm flex items-center justify-center gap-1 mt-2"
+              >
+                <ChevronLeft size={16} /> Tilbake
+              </button>
+            </div>
+          )}
 
           <div className="mt-8 pt-6 border-t border-stone-100">
              <button onClick={() => setShowRules(true)} className="text-stone-400 hover:text-stone-600 text-sm flex items-center justify-center gap-1 mx-auto">
@@ -185,8 +254,15 @@ const App: React.FC = () => {
         
         {/* Status Text */}
         {status === 'playing' && (
-          <div className={`text-center px-6 py-2 rounded-full font-bold shadow-sm transition-colors ${currentPlayer === 'p1' ? 'bg-p1/10 text-p1-dark' : 'bg-p2/10 text-p2-dark'}`}>
-            {turnMessage}
+          <div className="flex flex-col items-center gap-1">
+             <div className={`text-center px-6 py-2 rounded-full font-bold shadow-sm transition-colors ${currentPlayer === 'p1' ? 'bg-p1/10 text-p1-dark' : 'bg-p2/10 text-p2-dark'}`}>
+              {turnMessage}
+            </div>
+            {mode === 'cpu' && (
+               <div className="text-xs font-bold text-stone-300 uppercase tracking-widest">
+                  CPU: {difficulty === 'easy' ? 'Lett' : difficulty === 'medium' ? 'Medium' : 'Vanskelig'}
+               </div>
+            )}
           </div>
         )}
 
@@ -197,11 +273,17 @@ const App: React.FC = () => {
           isValidMove={(id) => isValidMove(id)}
           currentPlayer={currentPlayer}
           results={result ? result.rowResults : null}
+          playerNames={playerNames}
+          onEditName={(p) => setEditingPlayer(p)}
         />
 
         {/* Results View */}
         {status === 'finished' && result && (
-          <Results result={result} onRestart={() => setStatus('menu')} />
+          <Results 
+            result={result} 
+            onRestart={() => setStatus('menu')} 
+            playerNames={playerNames}
+          />
         )}
 
       </main>
@@ -216,7 +298,17 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Rules Modal (Repeated for accessibility in-game) */}
+      {/* Name Edit Modal */}
+      {editingPlayer && (
+        <NameEditModal 
+          player={editingPlayer}
+          currentName={playerNames[editingPlayer]}
+          onSave={handleUpdateName}
+          onClose={() => setEditingPlayer(null)}
+        />
+      )}
+
+      {/* Rules Modal */}
       {showRules && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setShowRules(false)}>
             <div className="bg-white p-6 rounded-2xl max-w-md shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
