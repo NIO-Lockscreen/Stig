@@ -1,98 +1,57 @@
 <!DOCTYPE html>
-<html lang="no">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Livets Tre</title>
+    <title>MasterKey</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              serif: ['Lora', 'serif'],
               sans: ['Nunito', 'sans-serif'],
             },
             colors: {
-              ghibli: {
-                cream: '#fcfbf7',
-                green: '#74a878',
-                darkGreen: '#3e5c41',
-                sky: '#a5d0e6',
-                cloud: '#f0f8ff',
-                earth: '#8c7b6c',
-                wood: '#5c4a3d',
-              }
-            },
-            animation: {
-              'float': 'float 6s ease-in-out infinite',
-              'grow': 'grow 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
-            },
-            keyframes: {
-              float: {
-                '0%, 100%': { transform: 'translateY(0)' },
-                '50%': { transform: 'translateY(-10px)' },
+              paper: '#fdfbf7',
+              ink: '#2d3748',
+              p1: {
+                light: '#bfdbfe', // blue-200
+                DEFAULT: '#3b82f6', // blue-500
+                dark: '#1e40af', // blue-800
               },
-              grow: {
-                '0%': { transform: 'scale(0.5)', opacity: '0' },
-                '100%': { transform: 'scale(1)', opacity: '1' },
+              p2: {
+                light: '#fecaca', // red-200
+                DEFAULT: '#ef4444', // red-500
+                dark: '#991b1b', // red-800
+              },
+              key: {
+                light: '#e2e8f0', // slate-200
+                DEFAULT: '#64748b', // slate-500
+              },
+              master: {
+                light: '#fde68a', // amber-200
+                DEFAULT: '#d97706', // amber-600
               }
             }
-          },
-        },
+          }
+        }
       }
     </script>
     <style>
       body {
-        background-color: #fcfbf7;
-        /* Ghibli-esque painted background feel */
-        background-image: radial-gradient(#dcebd0 1px, transparent 1px), radial-gradient(#dcebd0 1px, transparent 1px);
-        background-position: 0 0, 25px 25px;
-        background-size: 50px 50px;
-      }
-      
-      @media print {
-        .no-print {
-          display: none !important;
-        }
-        body {
-          background: white;
-        }
-        .print-canvas {
-          transform: scale(0.8);
-          transform-origin: top left;
-          width: 100%;
-          overflow: visible;
-        }
-      }
-
-      /* Custom scrollbar */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #f1f1f1; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #74a878; 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #3e5c41; 
+        background-color: #f3f0e9;
       }
     </style>
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0"
+    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4"
   }
 }
 </script>
@@ -100,6 +59,6 @@
 </head>
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>

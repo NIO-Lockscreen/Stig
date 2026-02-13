@@ -1,36 +1,29 @@
-export interface Person {
-  id: string;
-  name: string;
-  birthDate: string;
-  deathDate?: string;
-  photoUrl?: string;
-  bio?: string;
-  gender?: 'male' | 'female' | 'other';
-  // Relationships
-  parents: string[];
-  children: string[];
-  spouses: string[];
-  exSpouses: string[]; // New field for ex-partners
+export type Player = 'p1' | 'p2';
+
+export interface CellData {
+  id: number; // 0-9
+  value: number | null;
+  type: 'p1' | 'p2' | 'key' | 'master';
+  row?: number; // 0, 1, 2. Master is undefined or null
 }
 
-export interface TreeData {
-  id: string;
-  name: string; // The "Garden" name
-  description?: string;
-  nodes: Record<string, Person>;
-  rootId: string; // The central node ID for initial view
-  createdAt: number;
+export type GameStatus = 'menu' | 'playing' | 'finished';
+export type GameMode = 'pvp' | 'cpu';
+
+export interface RowResult {
+  rowId: number;
+  winner: Player | 'tie';
+  reason: 'low' | 'high'; // 'low' wins because keys match, 'high' wins because keys differ
+  p1Value: number;
+  p2Value: number;
+  keyValue: number;
+  masterValue: number;
+  masterMatchesKey: boolean;
 }
 
-// For the Gemini Storyteller
-export interface FamilyStory {
-  title: string;
-  content: string;
-  mood: 'nostalgic' | 'joyful' | 'epic';
-}
-
-export enum ViewMode {
-  EDIT = 'EDIT',
-  VIEW = 'VIEW',
-  PRINT = 'PRINT'
+export interface GameResult {
+  rowResults: RowResult[];
+  p1Score: number;
+  p2Score: number;
+  overallWinner: Player | 'tie';
 }
