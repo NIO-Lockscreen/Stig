@@ -252,10 +252,10 @@ const App: React.FC = () => {
 
   // --- IMPROVED POLLING (1 second for active games) ---
   useEffect(() => {
+    let lastKnownUpdate = 0; // Track server's lastUpdate timestamp
+    
     if ((mode === 'online' && activeGameId) || (status === 'matchmaking' && activeGameId && privateLobbyKey)) {
       pollInterval.current = window.setInterval(async () => {
-        // Remove the isSubmitting check - we need continuous polling
-        
         const data = await fetchOnlineData(1);
         if (data && data.active_games && data.active_games[activeGameId]) {
           const game = data.active_games[activeGameId];
@@ -265,14 +265,17 @@ const App: React.FC = () => {
              setPlayerNames({ p1: game.p1.name, p2: game.p2.name });
              setMode('online');
              setStatus('playing');
+             lastKnownUpdate = game.lastUpdate;
              return;
           }
 
-          // Game Sync
-          if (status === 'playing') {
+          // Game Sync - ONLY update if server has newer data
+          if (status === 'playing' && game.lastUpdate > lastKnownUpdate) {
+            lastKnownUpdate = game.lastUpdate;
+            
             const amIP1 = game.p1.id === onlineId;
 
-            // Always sync state - remove the diff checks for immediate updates
+            // Sync state from server
             setCells(game.cells);
             setCurrentPlayer(game.currentTurn);
 
@@ -324,6 +327,34 @@ const App: React.FC = () => {
 
     if (selectedMode === 'pvp') setPlayerNames({ p1: 'Spiller 1', p2: 'Spiller 2' });
     if (selectedMode === 'cpu') setPlayerNames({ p1: 'Du', p2: 'CPU' });
+  };
+
+  const handleLeaveGame = async () => {
+    // If we are in an active online game, forfeit
+    if (mode === 'online' && activeGameId) {
+      // Capture ID to avoid state closure issues if state updates fast
+      const gameIdToCancel = activeGameId; 
+      
+      // Fire and forget
+      transactionalUpdate((data) => {
+        const game = data.active_games[gameIdToCancel];
+        if (!game) return null; // Game already gone
+        if (game.winner) return null; // Already finished
+        
+        const amIP1 = game.p1.id === onlineId;
+        // Winner is the other player
+        game.winner = amIP1 ? 'p2' : 'p1';
+        game.lastUpdate = Date.now();
+        return data;
+      });
+    }
+
+    // Always navigate back
+    setStatus('menu');
+    setMode('pvp');
+    setActiveGameId(null);
+    setResult(null);
+    setDisconnectMsg('');
   };
 
   const handleFindMatch = async (playerName: string) => {
@@ -789,7 +820,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-paper">
       <header className="p-4 flex justify-between items-center max-w-lg mx-auto w-full">
-         <button onClick={() => { setStatus('menu'); setMode('pvp'); }} className="text-stone-400 hover:text-ink font-bold text-sm">
+         <button onClick={handleLeaveGame} className="text-stone-400 hover:text-ink font-bold text-sm">
            &larr; Meny
          </button>
          <h1 className="font-bold text-ink text-lg">MasterKey</h1>
