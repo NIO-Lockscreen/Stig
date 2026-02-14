@@ -138,22 +138,52 @@ const App: React.FC = () => {
     }
   }, [status]);
 
+  // Matchmaking Timer Ticker
   useEffect(() => {
     let timer: number;
     if (status === 'matchmaking' && !privateLobbyKey) {
       timer = window.setInterval(() => {
-        setMatchmakingTime(t => {
-           // Increased to 20s to prioritize human matchmaking
-           if (t >= 20) {
-             startBotMatch();
-             return 0;
-           }
-           return t + 1;
-        });
+        setMatchmakingTime(t => t + 1);
       }, 1000);
     }
     return () => clearInterval(timer);
   }, [status, privateLobbyKey]);
+
+  // Matchmaking Polling (Public)
+  useEffect(() => {
+     let interval: number;
+     if (status === 'matchmaking' && !privateLobbyKey) {
+        interval = window.setInterval(async () => {
+           const data = await fetchOnlineData();
+           if (data && data.active_games) {
+              const myGameId = Object.keys(data.active_games).find(gid => {
+                 const g = data.active_games[gid];
+                 return (g.p1.id === onlineId || (g.p2 && g.p2.id === onlineId)) && !g.isPrivate;
+              });
+
+              if (myGameId) {
+                 const game = data.active_games[myGameId];
+                 setActiveGameId(myGameId);
+                 setIsHost(game.p1.id === onlineId);
+                 setPlayerNames({ p1: game.p1.name, p2: game.p2?.name || 'Motstander' });
+                 setMode('online');
+                 setCells(game.cells);
+                 setCurrentPlayer(game.currentTurn);
+                 setStatus('playing');
+              }
+           }
+        }, 2000);
+     }
+     return () => clearInterval(interval);
+  }, [status, privateLobbyKey, onlineId]);
+
+  // Trigger Bot Match when timer expires
+  useEffect(() => {
+    if (status === 'matchmaking' && !privateLobbyKey && matchmakingTime >= 20) {
+      startBotMatch();
+    }
+  }, [status, privateLobbyKey, matchmakingTime]);
+
 
   // --- TURN TIMER & SYNC ---
   // Replaces the local interval with server-synced time
@@ -226,7 +256,7 @@ const App: React.FC = () => {
     setTurnTimer(30);
   };
 
-  // --- POLLING ---
+  // --- POLLING FOR ACTIVE GAME UPDATES ---
   useEffect(() => {
     if ((mode === 'online' && activeGameId) || (status === 'matchmaking' && activeGameId && privateLobbyKey)) {
       pollInterval.current = window.setInterval(async () => {
@@ -363,30 +393,9 @@ const App: React.FC = () => {
         cleanData.waiting_players.push({ id: onlineId, name: playerName, timestamp: Date.now() });
         await updateOnlineData(cleanData);
       }
+      // Enter matchmaking state - polling handled by useEffect
       setStatus('matchmaking');
       setMatchmakingTime(0);
-      
-      const waitInterval = setInterval(async () => {
-        const updatedData = await fetchOnlineData();
-        if (updatedData) {
-           const myGameKey = Object.keys(updatedData.active_games).find(key => {
-             const g = updatedData.active_games[key];
-             return (g.p1.id === onlineId || (g.p2 && g.p2.id === onlineId)) && !g.isPrivate;
-           });
-
-           if (myGameKey) {
-             clearInterval(waitInterval);
-             const game = updatedData.active_games[myGameKey];
-             setActiveGameId(myGameKey);
-             setIsHost(game.p1.id === onlineId);
-             setPlayerNames({ p1: game.p1.name, p2: game.p2?.name || 'Unknown' });
-             setMode('online');
-             setCells(game.cells);
-             setCurrentPlayer('p1');
-             setStatus('playing');
-           }
-        }
-      }, 2000);
     }
     setIsLoadingOnline(false);
   };
