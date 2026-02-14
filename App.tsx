@@ -10,7 +10,7 @@ import { NumberPickerModal } from './components/NumberPickerModal';
 import { NameEditModal } from './components/NameEditModal';
 import { Results } from './components/Results';
 import { OnlineMenu } from './components/OnlineMenu';
-import { Users, Info, Cpu, ChevronLeft, Loader2, Wifi, WifiOff, Crown, Copy, Check } from 'lucide-react';
+import { Users, Info, Cpu, ChevronLeft, Loader2, Wifi, WifiOff, Crown, Copy, Check, Globe } from 'lucide-react';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<GameStatus>('menu');
@@ -37,6 +37,7 @@ const App: React.FC = () => {
   const [turnTimer, setTurnTimer] = useState(30);
   const [disconnectMsg, setDisconnectMsg] = useState('');
   const [isLoadingOnline, setIsLoadingOnline] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // New: Blocking state for moves
   const [onlineError, setOnlineError] = useState<string | null>(null);
   
   // Timeout tracking
@@ -97,16 +98,29 @@ const App: React.FC = () => {
     }
   };
 
-  // --- DEBUG FUNCTION (Press X to skip turn) ---
+  // --- DEBUG FUNCTION (Press X to skip turn or increment stats) ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'x' && status === 'playing' && mode === 'cpu' && currentPlayer === 'p1') {
+      const key = e.key.toLowerCase();
+      
+      // Debug: Skip turn in CPU mode
+      if (key === 'x' && status === 'playing' && mode === 'cpu' && currentPlayer === 'p1') {
         setCurrentPlayer('p2'); 
+      }
+
+      // Debug: Increment Stats in Online Setup
+      if (key === 'x' && status === 'online_setup') {
+         const newStats = { 
+           ...myStats, 
+           wins: myStats.wins + 1, 
+           currentStreak: myStats.currentStreak + 1 
+         };
+         saveStats(newStats);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [status, mode, currentPlayer]);
+  }, [status, mode, currentPlayer, myStats]);
 
   // --- ONLINE POLLING & LOGIC ---
 
@@ -141,76 +155,53 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [status, privateLobbyKey]);
 
-  // --- TURN TIMER & TIMEOUT HANDLING ---
+  // --- TURN TIMER & SYNC ---
+  // Replaces the local interval with server-synced time
   useEffect(() => {
     let interval: number;
-    if (status === 'playing' && (mode === 'online' || mode === 'online_bot')) {
-      setTurnTimer(30); 
-      
-      interval = window.setInterval(() => {
-        setTurnTimer(prev => {
-          if (prev <= 0) {
-            handleTurnTimeout();
-            return 30;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    
+    // Offline/Bot Timer
+    if (status === 'playing' && mode === 'online_bot') {
+       interval = window.setInterval(() => {
+          setTurnTimer(prev => {
+             if (prev <= 0) {
+                // Simple skip for bot
+                setCurrentPlayer(p => p === 'p1' ? 'p2' : 'p1');
+                return 30;
+             }
+             return prev - 1;
+          });
+       }, 1000);
     }
+
     return () => clearInterval(interval);
-  }, [status, mode, currentPlayer, isHost, activeGameId, consecutiveOpponentSkips]); // Added deps for timeout handler
+  }, [status, mode]);
 
   const handleTurnTimeout = async () => {
-     // Bot Mode / Offline
-     if (mode === 'online_bot') {
-        // Just skip to next player locally
-        const next = currentPlayer === 'p1' ? 'p2' : 'p1';
-        setCurrentPlayer(next);
-        return;
-     }
-
-     // Real PvP Online - Enforce Rules
+     // Real PvP Online - Enforce Rules via Server Update
      if (mode === 'online' && activeGameId) {
-        const amIP1 = isHost;
-        const isMyTurn = (currentPlayer === 'p1' && amIP1) || (currentPlayer === 'p2' && !amIP1);
+        // Fetch fresh state before enforcing timeout
+        const data = await fetchOnlineData();
+        if (!data || !data.active_games[activeGameId]) return;
+        
+        const game = data.active_games[activeGameId];
+        const amIP1 = game.p1.id === onlineId;
+        
+        // Verify it is still the same turn state that timed out
+        const serverTurn = game.currentTurn;
+        const isMyTurn = (serverTurn === 'p1' && amIP1) || (serverTurn === 'p2' && !amIP1);
 
-        // If it's NOT my turn, I enforce the timeout on the opponent
+        // Only the waiting player enforces the timeout on the slacking player
         if (!isMyTurn) {
-           const newSkipCount = consecutiveOpponentSkips + 1;
-           setConsecutiveOpponentSkips(newSkipCount);
-
-           const data = await fetchOnlineData();
-           if (data && data.active_games[activeGameId]) {
-              const game = data.active_games[activeGameId];
-
-              if (newSkipCount >= 2) {
-                 // DISCONNECT LOGIC
-                 game.winner = amIP1 ? 'p1' : 'p2'; // I win
-                 await updateOnlineData(data);
-                 setDisconnectMsg(`${playerNames[currentPlayer]} Disconnected`);
-                 finishGame(cells, true);
-              } else {
-                 // SKIP TURN LOGIC
-                 const nextPlayer = game.currentTurn === 'p1' ? 'p2' : 'p1';
-                 game.currentTurn = nextPlayer;
-                 game.lastUpdate = Date.now();
-                 await updateOnlineData(data);
-                 // We don't change local state immediately; polling will catch it
-              }
-           }
+           const nextPlayer = serverTurn === 'p1' ? 'p2' : 'p1';
+           game.currentTurn = nextPlayer;
+           game.lastUpdate = Date.now(); // Reset timer
+           
+           // We can track skips if we want, but simple turn passing is often enough
+           await updateOnlineData(data);
+           // Polling will update local state
         }
      }
-  };
-
-  const forceRandomMove = () => {
-    // Legacy function, kept if needed, but we now prefer skipping turns
-    const available = getAvailableNumbers(cells);
-    const empty = cells.filter(c => c.value === null);
-    if (available.length > 0 && empty.length > 0) {
-       const randNum = available[Math.floor(Math.random() * available.length)];
-       const randCell = empty[Math.floor(Math.random() * empty.length)];
-       handlePlaceNumber(randCell.id, randNum);
-    }
   };
 
   const startBotMatch = () => {
@@ -232,12 +223,16 @@ const App: React.FC = () => {
     setActiveCellId(null);
     setResult(null);
     setStatus('playing');
+    setTurnTimer(30);
   };
 
   // --- POLLING ---
   useEffect(() => {
     if ((mode === 'online' && activeGameId) || (status === 'matchmaking' && activeGameId && privateLobbyKey)) {
       pollInterval.current = window.setInterval(async () => {
+        // Don't poll while submitting a move to avoid jitter
+        if (isSubmitting) return;
+
         const data = await fetchOnlineData();
         if (data && data.active_games && data.active_games[activeGameId]) {
           const game = data.active_games[activeGameId];
@@ -255,26 +250,37 @@ const App: React.FC = () => {
             const amIP1 = game.p1.id === onlineId;
             const myTurn = (game.currentTurn === 'p1' && amIP1) || (game.currentTurn === 'p2' && !amIP1);
 
-            if (!myTurn) {
-              // Check if a move was actually made (cells different)
-              const cellsChanged = JSON.stringify(game.cells) !== JSON.stringify(cells);
-              
-              if (cellsChanged) {
-                 setCells(game.cells);
-                 // Reset consecutive skips because opponent made a move
-                 setConsecutiveOpponentSkips(0);
-              }
+            // Sync State if different
+            // JSON stringify is a cheap way to check deep equality for this size
+            if (JSON.stringify(game.cells) !== JSON.stringify(cells)) {
+               setCells(game.cells);
+            }
+            if (game.currentTurn !== currentPlayer) {
+               setCurrentPlayer(game.currentTurn);
+            }
 
-              setCurrentPlayer(game.currentTurn);
-              
-              if (game.winner) {
-                 if (game.winner === (amIP1 ? 'p1' : 'p2')) {
-                    // I won, possibly due to disconnect
-                    const opponentName = amIP1 ? game.p2?.name : game.p1.name;
-                    setDisconnectMsg(`${opponentName || 'Opponent'} Disconnected`);
-                 }
-                 finishGame(game.cells, true);
-              }
+            // Sync Timer based on server lastUpdate
+            const elapsed = (Date.now() - game.lastUpdate) / 1000;
+            const remaining = Math.max(0, 30 - Math.floor(elapsed));
+            setTurnTimer(remaining);
+            
+            // Check Timeout (Only waiting player triggers it)
+            if (remaining === 0 && !myTurn && !game.winner) {
+               handleTurnTimeout();
+            }
+
+            // Winner / Disconnect check
+            if (game.winner) {
+               if (game.winner === (amIP1 ? 'p1' : 'p2') && !result) {
+                  // I won, check if it was early (disconnect/timeout)
+                  const filledCount = game.cells.filter(c => c.value !== null).length;
+                  if (filledCount < TOTAL_NUMBERS) {
+                     setDisconnectMsg("Opponent Disconnected / Timed Out");
+                  }
+               }
+               if (status !== 'finished') {
+                   finishGame(game.cells, true, game.winner);
+               }
             }
           }
         }
@@ -283,7 +289,7 @@ const App: React.FC = () => {
     return () => {
       if (pollInterval.current) clearInterval(pollInterval.current);
     };
-  }, [mode, activeGameId, onlineId, status, privateLobbyKey, cells]);
+  }, [mode, activeGameId, onlineId, status, privateLobbyKey, cells, currentPlayer, isSubmitting, result]);
 
 
   // --- GAME ACTIONS ---
@@ -461,14 +467,11 @@ const App: React.FC = () => {
       const filledCount = cells.filter(c => c.value !== null).length;
       const isSpeedofile = playerNames.p2 === 'Speedofile';
       
-      // Determine if there is an "easy / winning" move available
       let isEasyMove = false;
       if (!isSpeedofile) {
         const available = getAvailableNumbers(cells);
         const currentScore = evaluatePartialBoard(cells);
         const empty = cells.filter(c => c.value === null);
-        
-        // Simple 1-step lookahead to see if score improves (P2 winning a row)
         for (const cell of empty) {
           for (const num of available) {
              const tempCells = cells.map(c => c.id === cell.id ? {...c, value: num} : c);
@@ -482,26 +485,17 @@ const App: React.FC = () => {
         }
       }
 
-      // Time Logic
       let minDelay = 3000;
       let maxDelay = 10000;
-
       if (isSpeedofile) {
-        // Speedofile always fast
         minDelay = 1000;
         maxDelay = 3000;
       } else if (isEasyMove) {
-        // Winning move found
         minDelay = 2000;
         maxDelay = 4000;
       } else if (filledCount < 6) { 
-        // First 3 turns for CPU (Moves 1, 3, 5 usually)
         minDelay = 3000;
         maxDelay = 5000;
-      } else {
-        // Default / Mid-Late game
-        minDelay = 3000;
-        maxDelay = 10000;
       }
 
       const delay = Math.random() * (maxDelay - minDelay) + minDelay;
@@ -522,6 +516,8 @@ const App: React.FC = () => {
   };
 
   const handleCellClick = (cellId: number) => {
+    // Prevent interaction if submitting
+    if (isSubmitting) return;
     if (mode === 'cpu' && currentPlayer === 'p2') return;
     if (mode === 'online_bot' && currentPlayer === 'p2') return;
     
@@ -541,23 +537,72 @@ const App: React.FC = () => {
   };
 
   const handlePlaceNumber = async (cellId: number, numberVal: number) => {
+    // 1. Online Mode - Transactional Update
+    if (mode === 'online' && activeGameId) {
+      setIsSubmitting(true);
+      setOnlineError(null);
+      
+      // Fetch fresh data
+      const data = await fetchOnlineData();
+      if (!data || !data.active_games[activeGameId]) {
+         setOnlineError("Tilkoblingsfeil. Kunne ikke hente spilldata.");
+         setIsSubmitting(false);
+         return;
+      }
+
+      const game = data.active_games[activeGameId];
+      const amIP1 = game.p1.id === onlineId;
+      
+      // Validate Turn (Server Authority)
+      const isMyTurnServer = (game.currentTurn === 'p1' && amIP1) || (game.currentTurn === 'p2' && !amIP1);
+      if (!isMyTurnServer) {
+        setOnlineError("Ikke din tur! Synkroniserer...");
+        setCells(game.cells); // Sync local to server
+        setCurrentPlayer(game.currentTurn);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Apply Move
+      const newCells = game.cells.map(c => c.id === cellId ? { ...c, value: numberVal } : c);
+      const filledCount = newCells.filter(c => c.value !== null).length;
+      const nextPlayer = game.currentTurn === 'p1' ? 'p2' : 'p1';
+      
+      game.cells = newCells;
+      game.currentTurn = filledCount === TOTAL_NUMBERS ? game.currentTurn : nextPlayer;
+      game.lastUpdate = Date.now();
+      
+      // Check Winner
+      let winner: Player | 'tie' | null = null;
+      if (filledCount === TOTAL_NUMBERS) {
+         const res = calculateResults(newCells);
+         winner = res.overallWinner;
+         game.winner = winner;
+      }
+
+      const success = await updateOnlineData(data);
+      if (success) {
+         // Only update local state if server write succeeded
+         setCells(newCells);
+         setCurrentPlayer(game.currentTurn);
+         setTurnTimer(30);
+         if (winner) {
+            finishGame(newCells, true, winner);
+         }
+      } else {
+         setOnlineError("Kunne ikke sende trekk. Prøv igjen.");
+      }
+      setIsSubmitting(false);
+      return;
+    }
+
+    // 2. Offline / Bot Mode
     const newCells = cells.map(c => c.id === cellId ? { ...c, value: numberVal } : c);
     setCells(newCells);
     setTurnTimer(30);
 
     const filledCount = newCells.filter(c => c.value !== null).length;
     const nextPlayer = currentPlayer === 'p1' ? 'p2' : 'p1';
-
-    if (mode === 'online' && activeGameId) {
-       const data = await fetchOnlineData();
-       if (data && data.active_games[activeGameId]) {
-         const game = data.active_games[activeGameId];
-         game.cells = newCells;
-         game.currentTurn = filledCount === TOTAL_NUMBERS ? currentPlayer : nextPlayer; 
-         game.lastUpdate = Date.now();
-         updateOnlineData(data);
-       }
-    }
 
     if (filledCount === TOTAL_NUMBERS) {
       finishGame(newCells);
@@ -566,7 +611,7 @@ const App: React.FC = () => {
     }
   };
 
-  const finishGame = (finalCells: CellData[], fromRemote = false) => {
+  const finishGame = (finalCells: CellData[], fromRemote = false, explicitWinner?: Player | 'tie') => {
     try {
       const res = calculateResults(finalCells);
       setResult(res);
@@ -574,12 +619,13 @@ const App: React.FC = () => {
       setActiveGameId(null); 
 
       let iWon = false;
+      const effectiveWinner = explicitWinner || res.overallWinner;
+
       if (mode === 'online' || mode === 'online_bot') {
-        // Only set default disconnect msg if one wasn't already set by the timeout logic
         if (mode === 'online_bot' && !disconnectMsg) setDisconnectMsg(`${playerNames.p2} has disconnected.`);
         
         const amP1 = mode === 'online_bot' ? true : isHost; 
-        if ((res.overallWinner === 'p1' && amP1) || (res.overallWinner === 'p2' && !amP1)) {
+        if ((effectiveWinner === 'p1' && amP1) || (effectiveWinner === 'p2' && !amP1)) {
           iWon = true;
         }
 
@@ -587,7 +633,7 @@ const App: React.FC = () => {
         if (iWon) {
           newStats.wins += 1;
           newStats.currentStreak += 1;
-        } else if (res.overallWinner !== 'tie') {
+        } else if (effectiveWinner !== 'tie') {
           newStats.currentStreak = 0; 
         }
         saveStats(newStats);
@@ -605,16 +651,21 @@ const App: React.FC = () => {
         setTurnMessage(mode === 'online_bot' ? `${playerNames.p2} tenker...` : "Datamaskinen tenker...");
       } else if (mode === 'online') {
          const isMyTurn = (isHost && currentPlayer === 'p1') || (!isHost && currentPlayer === 'p2');
-         setTurnMessage(isMyTurn ? "Din tur!" : `Venter på ${currentPlayer === 'p1' ? playerNames.p1 : playerNames.p2}... (${turnTimer}s)`);
+         if (isSubmitting) {
+             setTurnMessage("Sender trekk...");
+         } else {
+             setTurnMessage(isMyTurn ? "Din tur!" : `Venter på ${currentPlayer === 'p1' ? playerNames.p1 : playerNames.p2}... (${turnTimer}s)`);
+         }
       } else {
         const name = currentPlayer === 'p1' ? playerNames.p1 : playerNames.p2;
         setTurnMessage(`${name}, velg en rute`);
       }
     }
-  }, [status, currentPlayer, mode, playerNames, isHost, turnTimer]);
+  }, [status, currentPlayer, mode, playerNames, isHost, turnTimer, isSubmitting]);
 
   const isValidMove = useCallback((cellId: number) => {
     if (status !== 'playing') return false;
+    if (isSubmitting) return false; // Block while submitting
     if ((mode === 'cpu' || mode === 'online_bot') && currentPlayer === 'p2') return false;
     if (mode === 'online') {
        if (isHost && currentPlayer === 'p2') return false;
@@ -623,7 +674,7 @@ const App: React.FC = () => {
 
     const cell = cells.find(c => c.id === cellId);
     return cell ? cell.value === null : false;
-  }, [status, cells, currentPlayer, mode, isHost]);
+  }, [status, cells, currentPlayer, mode, isHost, isSubmitting]);
 
   // --- RENDER ---
 
@@ -638,53 +689,61 @@ const App: React.FC = () => {
             <div className="space-y-4 animate-fade-in-up">
               <button 
                 onClick={() => startNewGame('pvp')}
-                className="w-full py-4 bg-p1/10 hover:bg-p1/20 text-p1-dark rounded-xl font-bold flex items-center justify-center gap-3 transition-colors border-2 border-transparent hover:border-p1/20"
+                className="w-full py-4 bg-p1/10 hover:bg-p1/20 text-p1-dark rounded-xl font-bold flex items-center justify-center gap-3 transition-colors"
               >
-                <Users size={24} />
-                Spill mot en Venn
+                <Users size={20} />
+                Spill mot venn (Lokalt)
               </button>
+              
               <button 
                 onClick={() => setMenuState('cpu_difficulty')}
-                className="w-full py-4 bg-stone-100 hover:bg-stone-200 text-ink rounded-xl font-bold flex items-center justify-center gap-3 transition-colors border-2 border-transparent hover:border-stone-300"
+                className="w-full py-4 bg-stone-100 hover:bg-stone-200 text-ink rounded-xl font-bold flex items-center justify-center gap-3 transition-colors"
               >
-                <Cpu size={24} />
+                <Cpu size={20} />
                 Spill mot CPU
               </button>
+
               <button 
                 onClick={() => setStatus('online_setup')}
-                className="w-full py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl font-bold flex items-center justify-center gap-3 shadow-md hover:shadow-lg transition-all active:scale-95"
+                className="w-full py-4 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl font-bold flex items-center justify-center gap-3 hover:opacity-90 transition-all shadow-lg hover:shadow-violet-200 hover:-translate-y-0.5"
               >
-                <Wifi size={24} />
+                <Wifi size={20} />
                 Spill Online
+              </button>
+
+              <button 
+                onClick={() => setShowRules(true)}
+                className="w-full py-2 text-stone-400 hover:text-stone-600 font-bold text-sm mt-4 flex items-center justify-center gap-2"
+              >
+                <Info size={16} />
+                Regler
               </button>
             </div>
           ) : (
-            <div className="space-y-3 animate-fade-in-up">
-              <div className="text-sm font-bold text-stone-400 uppercase tracking-widest mb-2">Velg vanskelighetsgrad</div>
-              <button onClick={() => startNewGame('cpu', 'easy')} className="w-full py-3 bg-green-50 text-green-700 rounded-xl font-bold">Lett</button>
-              <button onClick={() => startNewGame('cpu', 'medium')} className="w-full py-3 bg-yellow-50 text-yellow-700 rounded-xl font-bold">Medium</button>
-              <button onClick={() => startNewGame('cpu', 'hard')} className="w-full py-3 bg-red-50 text-red-700 rounded-xl font-bold">Vanskelig</button>
-              <button onClick={() => setMenuState('main')} className="w-full py-2 text-stone-400 hover:text-stone-600 font-bold text-sm flex items-center justify-center gap-1 mt-2"><ChevronLeft size={16} /> Tilbake</button>
-            </div>
+             <div className="space-y-4 animate-fade-in-up">
+                <h3 className="text-lg font-bold text-ink">Velg Vanskelighetsgrad</h3>
+                <button onClick={() => startNewGame('cpu', 'easy')} className="w-full py-3 bg-green-100 text-green-800 rounded-xl font-bold">Lett</button>
+                <button onClick={() => startNewGame('cpu', 'medium')} className="w-full py-3 bg-yellow-100 text-yellow-800 rounded-xl font-bold">Medium</button>
+                <button onClick={() => startNewGame('cpu', 'hard')} className="w-full py-3 bg-red-100 text-red-800 rounded-xl font-bold">Vanskelig</button>
+                <button onClick={() => setMenuState('main')} className="w-full py-2 text-stone-400 font-bold text-sm">Tilbake</button>
+             </div>
           )}
-          <div className="mt-8 pt-6 border-t border-stone-100">
-             <button onClick={() => setShowRules(true)} className="text-stone-400 text-sm flex items-center justify-center gap-1 mx-auto"><Info size={16} /> Hvordan spille?</button>
-          </div>
         </div>
-        <div className="mt-6 text-stone-400 text-xs font-bold tracking-widest uppercase opacity-50">Game by Stig Rune Bergly</div>
-        
+
+        {/* Rules Modal */}
         {showRules && (
-          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setShowRules(false)}>
-            <div className="bg-white p-6 rounded-2xl max-w-md shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
-              <h2 className="text-xl font-bold text-ink">Regler</h2>
-              <ul className="list-disc pl-5 space-y-2 text-stone-600 text-sm">
-                <li>Plasser tallene 1-10 i rutene.</li>
-                <li>Tre rader gir 1 poeng hver.</li>
-                <li><strong>Master Key</strong> (nederst) bestemmer reglene for hver rad.</li>
-                <li>Hvis <strong>Key</strong> (rad-nøkkel) er av <strong>samme type</strong> (oddetall/partall) som Master Key: Lavest tall vinner.</li>
-                <li>Hvis de er av <strong>ulik type</strong>: Høyest tall vinner.</li>
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowRules(false)}>
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setShowRules(false)} className="absolute top-4 right-4 text-stone-400 hover:text-ink"><ChevronLeft /></button>
+              <h2 className="text-2xl font-bold mb-4">Regler</h2>
+              <ul className="space-y-3 text-stone-600 text-sm">
+                <li>• Plasser tall fra 1-10 i rutene. Hver spiller har 5 tall.</li>
+                <li>• Målet er å vinne flest av de 3 radene.</li>
+                <li>• <strong>Master Key</strong> bestemmer reglene for hver rad.</li>
+                <li>• Hvis en rads <strong>Key</strong> er samme type (partall/oddetall) som Master Key, vinner <strong>laveste</strong> tall.</li>
+                <li>• Hvis de er ulik type, vinner <strong>høyeste</strong> tall.</li>
+                <li>• Bruk hintene (piler) for å se hvem som leder raden!</li>
               </ul>
-              <button onClick={() => setShowRules(false)} className="w-full py-2 bg-ink text-white rounded-lg font-bold mt-4">Forstått!</button>
             </div>
           </div>
         )}
@@ -692,13 +751,11 @@ const App: React.FC = () => {
     );
   }
 
-  // --- ONLINE SETUP SCREEN ---
   if (status === 'online_setup') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-paper">
-         <div className="max-w-sm w-full bg-white rounded-3xl shadow-xl p-8 border border-stone-100">
-            <h2 className="text-2xl font-extrabold text-ink mb-6 text-center">Spill Online</h2>
-            <OnlineMenu 
+         <div className="max-w-sm w-full bg-white rounded-3xl shadow-xl p-8 border border-stone-100 relative">
+             <OnlineMenu 
                stats={myStats} 
                population={onlinePopulation}
                isLoading={isLoadingOnline}
@@ -707,135 +764,127 @@ const App: React.FC = () => {
                onPrivateAction={handlePrivateAction}
                onBack={() => setStatus('menu')}
                onClearError={() => setOnlineError(null)}
-            />
+             />
          </div>
       </div>
     );
   }
 
-  // --- MATCHMAKING / LOBBY SCREEN ---
   if (status === 'matchmaking') {
      return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-paper">
-         <div className="max-w-sm w-full bg-white rounded-3xl shadow-xl p-12 border border-stone-100 text-center">
+       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-paper">
+         <div className="max-w-sm w-full bg-white rounded-3xl shadow-xl p-8 text-center animate-pulse">
+            <h2 className="text-2xl font-bold text-ink mb-4">Leter etter motstander...</h2>
+            <div className="flex justify-center mb-6">
+               <Loader2 className="animate-spin text-p1" size={48} />
+            </div>
             
             {privateLobbyKey ? (
-               // PRIVATE LOBBY WAITING UI
-               <>
-                  <div className="animate-bounce text-p1 mb-4 mx-auto w-fit"><Crown size={48} /></div>
-                  <h2 className="text-xl font-bold text-ink mb-2">Lobby opprettet!</h2>
-                  <p className="text-stone-400 text-sm mb-6">Del koden med en venn:</p>
-                  
-                  <div className="bg-stone-100 rounded-xl p-4 mb-6 flex items-center justify-center gap-3 cursor-pointer hover:bg-stone-200 transition-colors" onClick={() => navigator.clipboard.writeText(privateLobbyKey)}>
-                     <span className="text-4xl font-mono tracking-widest font-bold text-ink">{privateLobbyKey}</span>
-                     <Copy size={20} className="text-stone-400" />
+               <div className="bg-stone-100 p-4 rounded-xl mb-4">
+                  <div className="text-sm font-bold text-stone-500 uppercase">Lobby Kode</div>
+                  <div className="text-4xl font-mono font-extrabold text-ink tracking-widest my-2 flex items-center justify-center gap-3">
+                     {privateLobbyKey}
+                     <button onClick={() => navigator.clipboard.writeText(privateLobbyKey)} className="text-p1 hover:text-p1-dark active:scale-95 transition-transform"><Copy size={20}/></button>
                   </div>
-                  
-                  <div className="flex items-center justify-center gap-2 text-stone-500 text-sm animate-pulse">
-                     <Loader2 size={16} className="animate-spin" />
-                     Venter på motstander...
-                  </div>
-               </>
+                  <div className="text-xs text-stone-400">Del denne koden med en venn</div>
+               </div>
             ) : (
-               // REGULAR MATCHMAKING UI
-               <>
-                  <div className="animate-spin text-p1 mb-6 mx-auto w-fit"><Loader2 size={48} /></div>
-                  <h2 className="text-xl font-bold text-ink mb-2">Leter etter motstander...</h2>
-                  <p className="text-stone-400 text-sm mb-6">Tid: {matchmakingTime}s</p>
-                  {matchmakingTime > 15 && (
-                    <div className="text-xs text-stone-400 animate-pulse">
-                       Ser etter ekte spillere...
-                    </div>
-                  )}
-               </>
+               <p className="text-stone-500 mb-4">Tid: {matchmakingTime}s</p>
             )}
 
-            <button onClick={() => setStatus('online_setup')} className="mt-8 text-stone-400 font-bold hover:text-ink text-sm">Avbryt</button>
+            <button 
+              onClick={() => {
+                 setStatus('menu');
+                 setActiveGameId(null);
+                 setPrivateLobbyKey(null);
+              }}
+              className="px-6 py-2 bg-stone-200 hover:bg-stone-300 text-stone-600 rounded-lg font-bold transition-colors"
+            >
+              Avbryt
+            </button>
          </div>
-      </div>
+       </div>
      );
   }
 
-  // --- MAIN GAME ---
-  return (
-    <div className="min-h-screen flex flex-col bg-paper">
-      <header className="p-4 flex justify-between items-center max-w-lg mx-auto w-full">
-         <button onClick={() => { setStatus('menu'); setMode('pvp'); }} className="text-stone-400 hover:text-ink font-bold text-sm">
-           &larr; Meny
-         </button>
-         <h1 className="font-bold text-ink text-lg">MasterKey</h1>
-         
-         <div className="flex items-center gap-2">
-           {(mode === 'online' || mode === 'online_bot') && (
-             <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${turnTimer < 10 ? 'bg-red-100 text-red-600' : 'bg-stone-100 text-stone-500'}`}>
-               <div className="w-2 h-2 rounded-full bg-current animate-pulse" />
-               {turnTimer}s
-             </div>
-           )}
-           <button onClick={() => setShowRules(true)} className="text-stone-400 hover:text-ink">
-             <Info size={20} />
-           </button>
-         </div>
-      </header>
-
-      <main className="flex-1 flex flex-col items-center justify-start p-4 gap-6 max-w-lg mx-auto w-full relative">
-        
-        {(mode === 'online' || mode === 'online_bot') && myStats.wins >= 3 && (
-           <div className="absolute top-2 left-4 text-yellow-500 animate-bounce delay-700" style={{ transform: `scale(${1 + myStats.currentStreak * 0.1})` }}>
-              <Crown size={24} fill="currentColor" />
+  if (status === 'finished' && result) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-paper relative overflow-hidden">
+        {disconnectMsg && (
+           <div className="absolute top-10 bg-red-100 text-red-600 px-4 py-2 rounded-full font-bold shadow-sm flex items-center gap-2">
+             <WifiOff size={16} />
+             {disconnectMsg}
            </div>
         )}
-
-        {status === 'playing' && (
-          <div className="flex flex-col items-center gap-1">
-             <div className={`text-center px-6 py-2 rounded-full font-bold shadow-sm transition-colors ${currentPlayer === 'p1' ? 'bg-p1/10 text-p1-dark' : 'bg-p2/10 text-p2-dark'}`}>
-              {turnMessage}
-            </div>
-            {mode === 'cpu' && (
-               <div className="text-xs font-bold text-stone-300 uppercase tracking-widest">
-                  CPU: {difficulty === 'easy' ? 'Lett' : difficulty === 'medium' ? 'Medium' : 'Vanskelig'}
-               </div>
-            )}
-            {mode === 'online_bot' && (
-               <div className="text-xs font-bold text-green-600 uppercase tracking-widest flex items-center gap-1">
-                  <Wifi size={12} /> Live Match
-               </div>
-            )}
-          </div>
-        )}
-
-        <Grid 
-          cells={cells}
-          onCellClick={handleCellClick}
-          isValidMove={(id) => isValidMove(id)}
-          currentPlayer={currentPlayer}
-          results={realTimeResults.rowResults}
+        <Results 
+          result={result} 
+          onRestart={() => setStatus('menu')}
           playerNames={playerNames}
-          onEditName={(p) => (mode === 'pvp' ? setEditingPlayer(p) : null)} 
         />
+      </div>
+    );
+  }
 
-        {status === 'finished' && result && (
-          <div className="w-full">
-            <Results 
-              result={result} 
-              onRestart={() => setStatus('menu')} 
-              playerNames={playerNames}
-            />
-            {disconnectMsg && (
-              <div className="mt-4 p-3 bg-stone-800 text-white text-center rounded-lg text-sm flex items-center justify-center gap-2">
-                 <WifiOff size={16} /> {disconnectMsg}
-              </div>
-            )}
+  // PLAYING STATE
+  return (
+    <div className="min-h-screen flex flex-col items-center p-4 bg-paper max-w-md mx-auto relative">
+      {/* Header */}
+      <div className="w-full flex justify-between items-center mb-6 mt-2">
+         <button onClick={() => setStatus('menu')} className="p-2 bg-white rounded-full shadow-sm text-stone-400 hover:text-ink transition-colors">
+            <ChevronLeft size={24} />
+         </button>
+         <div className={`font-bold text-lg px-4 py-1 rounded-full shadow-sm border ${
+            currentPlayer === 'p1' ? 'bg-p1 text-white border-p1' : 'bg-p2 text-white border-p2'
+         }`}>
+            {turnMessage}
+         </div>
+         <div className="w-10"></div> {/* Spacer */}
+      </div>
+
+      {/* Error Overlay for Online */}
+      {onlineError && (
+          <div className="absolute top-20 left-4 right-4 z-50 bg-red-500 text-white p-3 rounded-lg shadow-lg text-center font-bold text-sm animate-bounce">
+             {onlineError}
           </div>
-        )}
+      )}
 
-        <div className="mt-auto py-4 text-stone-400 text-xs font-bold tracking-widest uppercase opacity-50">
-          Game by Stig Rune Bergly
-        </div>
+      {/* Grid */}
+      <div className="w-full mb-8 relative">
+          {/* Loading Overlay */}
+          {isSubmitting && (
+             <div className="absolute inset-0 z-20 bg-white/50 backdrop-blur-[1px] rounded-xl flex items-center justify-center">
+                <div className="bg-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 font-bold text-ink">
+                   <Loader2 className="animate-spin" size={18} />
+                   Sender trekk...
+                </div>
+             </div>
+          )}
+          
+          <Grid 
+            cells={cells}
+            onCellClick={handleCellClick}
+            isValidMove={isValidMove}
+            currentPlayer={currentPlayer}
+            results={realTimeResults.rowResults}
+            playerNames={playerNames}
+            onEditName={(p) => {
+               // Only allow editing own name in local or setup
+               if (mode === 'pvp') setEditingPlayer(p);
+            }}
+          />
+      </div>
 
-      </main>
+      {/* Footer Info */}
+      <div className="mt-auto mb-4 text-center">
+         {activeCellId === null ? (
+            <p className="text-stone-400 text-sm font-bold">Trykk på en ledig rute</p>
+         ) : (
+            <p className="text-p1 font-bold animate-pulse">Velg et tall!</p>
+         )}
+      </div>
 
-      {status === 'playing' && activeCellId !== null && (
+      {/* Modals */}
+      {activeCellId !== null && (
         <NumberPickerModal 
           availableNumbers={getAvailableNumbers(cells)}
           onSelectNumber={handleNumberSelected}
@@ -856,4 +905,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export { App };

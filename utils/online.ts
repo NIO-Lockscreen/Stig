@@ -1,26 +1,39 @@
 
 import { NPointData, OnlineGameData, OnlinePlayer } from "../types";
 
-const BIN_ID = "cf76e2d33157002605a4";
+// Updated Bin ID
+const BIN_ID = "c45759a29630327f1266";
 const API_URL = `https://api.npoint.io/${BIN_ID}`;
 
 export const fetchOnlineData = async (): Promise<NPointData | null> => {
-  try {
-    // Add cache: 'no-store' to prevent browser caching of old game state
-    const response = await fetch(API_URL, { cache: 'no-store' });
-    if (!response.ok) return null;
-    
-    const data = await response.json();
-    
-    // Ensure structure exists even if API returns empty object or null
-    return {
-      waiting_players: Array.isArray(data?.waiting_players) ? data.waiting_players : [],
-      active_games: (data?.active_games && typeof data.active_games === 'object') ? data.active_games : {}
-    };
-  } catch (e) {
-    console.error("Failed to fetch online data", e);
-    return null;
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      // Add cache: 'no-store' to prevent browser caching of old game state
+      const response = await fetch(API_URL, { cache: 'no-store' });
+      if (!response.ok) {
+         throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      // Ensure structure exists even if API returns empty object or null
+      return {
+        waiting_players: Array.isArray(data?.waiting_players) ? data.waiting_players : [],
+        active_games: (data?.active_games && typeof data.active_games === 'object') ? data.active_games : {}
+      };
+    } catch (e) {
+      console.warn(`Fetch attempt failed. Retries left: ${retries - 1}`, e);
+      retries--;
+      if (retries === 0) {
+        console.error("Failed to fetch online data after multiple attempts", e);
+        return null;
+      }
+      // Wait a bit before retrying
+      await new Promise(res => setTimeout(res, 500));
+    }
   }
+  return null;
 };
 
 export const updateOnlineData = async (data: NPointData): Promise<boolean> => {
