@@ -254,10 +254,9 @@ const App: React.FC = () => {
   useEffect(() => {
     if ((mode === 'online' && activeGameId) || (status === 'matchmaking' && activeGameId && privateLobbyKey)) {
       pollInterval.current = window.setInterval(async () => {
-        // Don't poll while submitting
-        if (isSubmitting) return;
-
-        const data = await fetchOnlineData(1); // Quick retry
+        // Remove the isSubmitting check - we need continuous polling
+        
+        const data = await fetchOnlineData(1);
         if (data && data.active_games && data.active_games[activeGameId]) {
           const game = data.active_games[activeGameId];
           
@@ -273,16 +272,9 @@ const App: React.FC = () => {
           if (status === 'playing') {
             const amIP1 = game.p1.id === onlineId;
 
-            // Sync State only if different
-            const cellsChanged = JSON.stringify(game.cells) !== JSON.stringify(cells);
-            const turnChanged = game.currentTurn !== currentPlayer;
-            
-            if (cellsChanged) {
-               setCells(game.cells);
-            }
-            if (turnChanged) {
-               setCurrentPlayer(game.currentTurn);
-            }
+            // Always sync state - remove the diff checks for immediate updates
+            setCells(game.cells);
+            setCurrentPlayer(game.currentTurn);
 
             // Sync Timer
             const elapsed = (Date.now() - game.lastUpdate) / 1000;
@@ -305,12 +297,12 @@ const App: React.FC = () => {
             }
           }
         }
-      }, 1000); // Reduced to 1 second for better responsiveness
+      }, 1000);
     }
     return () => {
       if (pollInterval.current) clearInterval(pollInterval.current);
     };
-  }, [mode, activeGameId, onlineId, status, privateLobbyKey, cells, currentPlayer, isSubmitting, result]);
+  }, [mode, activeGameId, onlineId, status, privateLobbyKey, result]);
 
 
   // --- GAME ACTIONS ---
