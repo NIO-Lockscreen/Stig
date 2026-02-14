@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { PlayerStats } from '../types';
 import { Crown, Globe, Lock, Search, Loader2, AlertCircle } from 'lucide-react';
@@ -73,15 +72,15 @@ export const OnlineMenu: React.FC<OnlineMenuProps> = ({
   return (
     <div className="w-full animate-fade-in-up">
       {/* Stats Header */}
-      <div className="bg-stone-100 rounded-xl p-4 mb-6 text-center relative overflow-hidden">
+      <div className="bg-stone-100 rounded-xl p-4 mb-6 text-center relative">
         <div className="text-sm font-bold text-stone-400 uppercase tracking-widest mb-1">Din Profil</div>
         
         <div className="flex flex-col items-center justify-center mb-2">
            <div className="relative">
              {hasCrown && (
                <div 
-                 className="absolute -top-8 left-1/2 -translate-x-1/2 text-yellow-500 drop-shadow-md transition-transform duration-500"
-                 style={{ transform: `translateX(-50%) scale(${Math.min(crownScale, 3)})` }}
+                 className="absolute -top-8 left-1/2 -translate-x-1/2 text-yellow-500 drop-shadow-md transition-transform duration-500 pointer-events-none z-20"
+                 style={{ transform: `translateX(-50%) scale(${crownScale})` }}
                >
                  <Crown fill="currentColor" size={24} />
                </div>
@@ -91,12 +90,12 @@ export const OnlineMenu: React.FC<OnlineMenuProps> = ({
                value={name}
                onChange={(e) => { setName(e.target.value); setLocalError(null); }}
                placeholder="Ditt Navn"
-               className="bg-white border border-stone-300 text-center font-bold text-xl rounded-lg py-1 px-3 w-40 text-ink focus:ring-2 focus:ring-p1 outline-none"
+               className="bg-white border border-stone-300 text-center font-bold text-xl rounded-lg py-1 px-3 w-40 text-ink focus:ring-2 focus:ring-p1 outline-none relative z-10"
              />
            </div>
         </div>
 
-        <div className="flex justify-center gap-6 text-sm">
+        <div className="flex justify-center gap-6 text-sm relative z-10">
           <div>
             <div className="text-stone-500 font-bold">Wins</div>
             <div className="text-lg font-extrabold text-p1">{stats.wins}</div>
@@ -109,7 +108,7 @@ export const OnlineMenu: React.FC<OnlineMenuProps> = ({
           </div>
         </div>
         
-        <div className="mt-3 flex items-center justify-center gap-2 text-xs font-bold text-stone-400 bg-stone-200/50 py-1 rounded-full w-fit mx-auto px-3">
+        <div className="mt-3 flex items-center justify-center gap-2 text-xs font-bold text-stone-400 bg-stone-200/50 py-1 rounded-full w-fit mx-auto px-3 relative z-10">
            <Globe size={12} />
            Players Online: <span className={population === 'High' ? 'text-green-600' : 'text-stone-500'}>{population}</span>
         </div>
