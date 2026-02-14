@@ -1,3 +1,4 @@
+
 import { CellData } from './types';
 
 // Grid Layout:
@@ -23,3 +24,9 @@ export const INITIAL_CELLS: CellData[] = [
 ];
 
 export const TOTAL_NUMBERS = 10;
+
+export const BOT_NAMES = [
+  'Shroud', 'Mr.Ziegler', 'DawiiZ', 'Speedofile', 'Honey', 'GoonCat', 'HarleyQ',
+  'NoobMaster69', 'ProGamer_Oslo', 'VikingWarrior', 'FishSlap', 'Karen', 
+  'DrDisrespect_Wish', 'Ninja_Lover', 'Slayer', 'TacoBell_Wifi', 'LagSwitcher'
+];
